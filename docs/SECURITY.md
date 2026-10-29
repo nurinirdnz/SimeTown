@@ -42,11 +42,13 @@ Be honest about these with judges and mentors.
 - **No independent review.** There has been no penetration test and no security audit.
 - **Sign-in is e-mail and password.** The proposal's phone one-time code and any second factor for
   admins are not built. Admin accounts should get a second factor before a pilot.
-- **No self-service password reset** (there is no e-mail or SMS). An admin issues a new set-password
-  link. For an account that is already in use, and for any admin account, a second admin must
-  approve it and only the approver sees the link; the owner gets an urgent notice. New admin
-  accounts likewise need a second HQ admin. Whoever holds a link can still set the password, so
-  the pilot needs delivery straight to the person (e-mail or SMS).
+- **Password reset relies on e-mail alone.** *Forgot password* e-mails a single-use link that
+  expires after 30 minutes; the answer is the same whether or not the account exists, only the
+  link's hash is stored, and using it signs out every device. Whoever controls the mailbox
+  controls the account, and nothing is sent without a configured mail account. Admins can also
+  issue a set-password link: for an account that is already in use, and for any admin account,
+  a second admin must approve it and only the approver sees the link; the owner gets an urgent
+  notice. New admin accounts likewise need a second HQ admin.
 - **Registration says when an e-mail is already used.** Signing in gives one answer for every
   failure, but registering (and applying as a shop) cannot hide that an e-mail is taken without
   sending mail. Per-address limits slow anyone checking many addresses; the full fix is e-mail

@@ -32,9 +32,9 @@ assessment below is therefore of the *specification*.
 | A separate API service, queues, WebSockets | The pilot design has them. At prototype scale they add operations work and no user benefit: polling every few seconds is enough for a counter confirmation and a flood alert. The backend is already isolated (`src/server`) so it can be lifted out later. Redis is optional and limited to rate limits and a sign-in cache (see *Optional Redis* in section 3); money, the ledger, Insights and jobs stay in PostgreSQL. |
 | An ORM | The ledger is a handful of precise SQL statements. Plain parameterised SQL keeps them readable and reviewable, and removes a dependency. |
 | A global state library, a component library, a chart library, a date library | SWR covers server data; the UI kit is about 900 lines; charts are plain CSS bars; dates use `Intl`. |
-| Dark mode; a full Malay translation | Worth doing, and each doubles the testing surface. The third edition adds an EN/BM switch (`src/lib/i18n.ts`) covering navigation, the home screen, Simple Mode, Tamu and flood alerts; the rest stays in English. |
-| Third-party map tiles | They would break the strict security policy and send residents' positions to another company. The township map is drawn in the page from the township's own data (`township-map.tsx`). |
-| E-mail, SMS, push | Marked "simulated" in the proposal. Notifications are in-app; `notify()` is the single hook where delivery would be added. |
+| Dark mode | Worth doing, and it doubles the testing surface. (Bahasa Malaysia is now complete: every interface string has a Malay entry, and `tests/i18n.test.ts` fails the build on any that does not; see [LANGUAGES.md](LANGUAGES.md).) |
+| Third-party map tiles by default | They would send residents' positions to another company. The township map is drawn in the page from the township's own data (`township-map.tsx`). A Google basemap for Gerak is optional: it is used only when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (`google-township-map.tsx`). |
+| SMS, push | Marked "simulated" in the proposal. Notifications are in-app; flood SMS is recorded as simulated. Transactional e-mail *is* built (welcome, password reset, parcel and visitor notices) through an outbox sent by a job; see [EMAIL_DESIGN.md](EMAIL_DESIGN.md). |
 
 ## 2. Target architecture
 

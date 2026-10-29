@@ -5,7 +5,7 @@ import { LocalizedDiv } from '@/components/ui/localized-elements';
 
 import { BellRing, CalendarClock, Flag, Package, CheckCircle2, Clock, DoorOpen, History, LockKeyhole, MapPin, RefreshCw, Store, Undo2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Children, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardHeader } from '@/components/ui/card';
 import { EmptyState, Skeleton, SkeletonCard } from '@/components/ui/feedback';
@@ -129,17 +129,18 @@ const atGuardhouse = (p: { state: ParcelState }) => p.state === 'RELOCATED_TO_ST
 
 /**
  * Locker parcels for the household: where each is, the QR code and PIN, and how long it has waited. The Parcel
- * lockers tab shows the home's own door and what is in it; the Guardhouse tab shows the locker parcels kept there.
+ * lockers tab shows the home's own door and what is in it; the Guardhouse tab shows the locker parcels kept there,
+ * with the parcels the guard keeps on the shelf (`children`) in the same grid, so every card lines up.
  */
-export function LockerParcels({ view = 'doors' }: { view?: 'doors' | 'guardhouse' }) {
+export function LockerParcels({ view = 'doors', children }: { view?: 'doors' | 'guardhouse'; children?: ReactNode }) {
   return (
     <Suspense fallback={<LockersSkeleton />}>
-      <LockerParcelList view={view} />
+      <LockerParcelList view={view}>{children}</LockerParcelList>
     </Suspense>
   );
 }
 
-function LockerParcelList({ view }: { view: 'doors' | 'guardhouse' }) {
+function LockerParcelList({ view, children }: { view: 'doors' | 'guardhouse'; children?: ReactNode }) {
   const search = useSearchParams();
   const station = (search.get('station') ?? '').toUpperCase();
   const parcelId = search.get('parcel');
@@ -156,12 +157,15 @@ function LockerParcelList({ view }: { view: 'doors' | 'guardhouse' }) {
   const data = mine.data;
   const live = data.parcels.filter((p) => !['COLLECTED', 'RETURNED'].includes(p.state) && (view === 'guardhouse' ? atGuardhouse(p) : !atGuardhouse(p)));
   if (view === 'guardhouse') {
-    // Above the parcels the guard keeps on the shelf: whether the guardhouse is open, then the locker parcels kept there.
+    // Whether the guardhouse is open, then one list of everything kept there: locker parcels first, then shelf parcels.
+    // One column at every width: a locker parcel card is about twice as tall as a shelf card, so pairs never line up.
+    const shelf = Children.toArray(children);
     return (
-      <LocalizedDiv className="space-y-4" aria-label="Smart locker parcels at the guardhouse">
-        {data.counters.length > 0 && <div className="stagger-in grid gap-3 sm:grid-cols-2">{data.counters.map((c) => <CounterStatus key={c.id} counter={c} />)}</div>}
-        {live.length > 0 && <div className="stagger-in grid gap-4 2xl:grid-cols-2">
-          {live.map((p) => <div key={p.id} id={`parcel-${p.id}`} className={`scroll-mt-20 rounded-xl ${parcelId === p.id ? 'ring-2 ring-brand-400' : ''}`}><LockerCard parcel={p} policy={data.policy} atStation={station} onChange={() => void mine.mutate()} /></div>)}
+      <LocalizedDiv className="space-y-4" aria-label="Parcels at the guardhouse">
+        {data.counters.length > 0 && <div className={cn('stagger-in grid gap-3', data.counters.length > 1 && 'sm:grid-cols-2')}>{data.counters.map((c) => <CounterStatus key={c.id} counter={c} />)}</div>}
+        {live.length + shelf.length > 0 && <div className="stagger-in grid gap-4">
+          {live.map((p) => <div key={p.id} id={`parcel-${p.id}`} className={`h-full scroll-mt-20 rounded-xl ${parcelId === p.id ? 'ring-2 ring-brand-400' : ''}`}><LockerCard parcel={p} policy={data.policy} atStation={station} onChange={() => void mine.mutate()} /></div>)}
+          {shelf}
         </div>}
       </LocalizedDiv>
     );
@@ -268,7 +272,7 @@ function LockerCard({ parcel: p, policy, atStation, onChange }: { parcel: Locker
   const atCounter = p.state === 'RELOCATED_TO_STORAGE' || p.state === 'RETURN_PENDING';
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="h-full overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-100 p-5">
         <div>
           <p className="font-display text-lg font-bold text-ink-900"><Text>{`From ${p.company}`}</Text></p>

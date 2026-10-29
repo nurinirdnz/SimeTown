@@ -81,11 +81,11 @@ secret store, never in the repository or the image. Generate tokens with
 ### With Docker
 
 ```bash
-docker build -t kita-plus .                       # the image that serves traffic
-docker build --target tools -t kita-plus-tools .  # the image for migrations and jobs
+docker build -t simetown .                       # the image that serves traffic
+docker build --target tools -t simetown-tools .  # the image for migrations and jobs
 
-docker run --env-file .env kita-plus-tools db:migrate
-docker run --env-file .env -p 3000:3000 kita-plus
+docker run --env-file .env simetown-tools db:migrate
+docker run --env-file .env -p 3000:3000 simetown
 ```
 
 Or the whole stack locally, with PostgreSQL:
@@ -153,7 +153,7 @@ A new database has no township, no homes and nobody who can sign in. Describe th
 (copy `docs/bootstrap.example.json`; homes come from the property record) and run, once:
 
 ```bash
-npm run bootstrap -- my-township.json      # or: docker run --env-file .env -v "$PWD:/data" kita-plus-tools bootstrap -- /data/my-township.json
+npm run bootstrap -- my-township.json      # or: docker run --env-file .env -v "$PWD:/data" simetown-tools bootstrap -- /data/my-township.json
 ```
 
 It creates the township, zones and homes, and prints a one-time link for the first SDP HQ admin to

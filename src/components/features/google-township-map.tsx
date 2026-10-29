@@ -41,14 +41,29 @@ declare global {
   interface Window {
     google?: { maps: GoogleMapsApi };
     __kitaGoogleMapsReady?: () => void;
+    gm_authFailure?: () => void;
   }
 }
 
 let mapsPromise: Promise<GoogleMapsApi> | null = null;
 
+// Google loads its script fine but then refuses the key (wrong website restriction, API not enabled, no billing)
+// and paints its own "Oops!" box. It reports that only through window.gm_authFailure, so we listen there.
+let authFailed = false;
+const authFailureListeners = new Set<() => void>();
+function onAuthFailure(listener: () => void) {
+  authFailureListeners.add(listener);
+  return () => void authFailureListeners.delete(listener);
+}
+
 function loadGoogleMaps(apiKey: string): Promise<GoogleMapsApi> {
   if (window.google?.maps?.Map && window.google.maps.marker?.AdvancedMarkerElement) return Promise.resolve(window.google.maps);
   if (mapsPromise) return mapsPromise;
+
+  window.gm_authFailure = () => {
+    authFailed = true;
+    for (const listener of authFailureListeners) listener();
+  };
 
   mapsPromise = new Promise<GoogleMapsApi>((resolve, reject) => {
     window.__kitaGoogleMapsReady = () => {
@@ -131,10 +146,13 @@ export function GoogleTownshipMap({
   const element = useRef<HTMLDivElement>(null);
   const map = useRef<GoogleMap | null>(null);
   const overlays = useRef<(GoogleOverlay | GoogleMarker)[]>([]);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(authFailed);
+
+  useEffect(() => onAuthFailure(() => setFailed(true)), []);
 
   useEffect(() => {
     let cancelled = false;
+    if (authFailed) return;
 
     void loadGoogleMaps(apiKey)
       .then((maps) => {

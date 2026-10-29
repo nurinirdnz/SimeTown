@@ -1,25 +1,131 @@
-# SimeTown Township Super-App
+<div align="center">
 
-One web app for township life: residents recycle, move, report, share and shop locally; shops give
-and accept points; sponsors fund challenges; Sime Darby Property (SDP) sees what the township
-achieves. Built from the proposal **"SimeTown Township Super-App"** for the Sime Darby Property
-University Hackathon 2026 ("Township of Tomorrow", People & Planet).
+# SimeTown — Township Super-App
 
-> A student prototype. It is **not** an official Sime Darby Property product. All residents,
-> shops, sponsors and figures in the demo data are invented, and **no real money moves**.
+**One web app for an entire township: residents, shops, home-service companies, sponsors, guards,
+couriers and the property developer, on one shared, audited rewards ledger.**
 
-The heart of the system is one rule: **no pool, no points.** A point is given only after a shop, a
-sponsor or SDP has paid for it, and the reward float is checked against the points residents hold,
-to the sen. That rule is enforced in the database itself, not just in the screens.
+![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
+![React 19](https://img.shields.io/badge/React-19-149eca?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791?logo=postgresql&logoColor=white)
+![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss&logoColor=white)
+![Vitest](https://img.shields.io/badge/tests-~520_cases-6e9f18?logo=vitest&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-GHCR-2496ed?logo=docker&logoColor=white)
+![EN / BM](https://img.shields.io/badge/i18n-English_%2F_Bahasa_Malaysia-b31942)
+
+Built for the **Sime Darby Property University Hackathon 2026** — *"Township of Tomorrow", People & Planet*.
+
+[Features by role](docs/FEATURES.md) · [Demo guide](docs/DEMO_TESTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [API](docs/API.md)
+
+</div>
+
+> **Student prototype.** Not an official Sime Darby Property product. Every resident, shop, sponsor,
+> courier company and figure in the demo data is invented, and **no real money moves**.
 
 ---
 
-## 1. Run it in five minutes
+## Why it exists
 
-You need **Node.js 22 or newer**. Nothing else: by default the app uses an in-process PostgreSQL
-(PGlite), so there is no database to install.
+A modern township runs on a dozen disconnected tools: a visitor app at the gate, WhatsApp groups
+for complaints, a paper logbook for parcels, a separate loyalty card at every shop, and nothing at
+all for floods. SimeTown puts all of it behind **one sign-in, one points balance and one console**,
+and ties it to a single rule:
+
+> **No pool, no points.** A point exists only after a shop, a sponsor or the developer has paid for
+> it. The reward float is reconciled against every point residents hold, to the sen, and that rule
+> is enforced **inside PostgreSQL**, not just in the UI.
+
+## At a glance
+
+| | |
+| --- | --- |
+| **9 roles** | Resident · Shop / home-service business · Sponsor · Gate guard · Guardhouse parcel staff · Courier (and courier-company manager) · Township staff · Township admin · SDP HQ admin |
+| **17 modules** | Points & XP, Kitar (recycling), Gerak (active mobility), Lapor (reporting), Komuniti, Banjir (flood), Akses+ (accessibility), Tamu (visitors), Parcels & smart lockers, Courier platform, SimeTown Home (home services), Merchant, Shop Offers, Partner Hub, Insights, AI Assistant, Incidents |
+| **88 screens** | Every role has its own shell, phone-first navigation and walkthroughs |
+| **434 API operations** | One typed route table, generated OpenAPI spec, CI fails if the docs drift |
+| **52 SQL migrations** | Plain parameterised SQL, no ORM; double-entry ledger with database-level guards |
+| **~520 test cases** | 39 Vitest suites, run on in-process PGlite **and** a real PostgreSQL 16 in CI, including concurrency tests |
+| **2 languages** | Full English / Bahasa Malaysia; a test fails the build if any UI string lacks a Malay entry |
+
+---
+
+## Engineering highlights
+
+**A money-grade ledger in the database.** Every point movement is a double-entry transaction
+(`src/server/modules/ledger`). A `CHECK (balance >= 0)` makes overdrawing a pool impossible, a
+deferred constraint trigger rejects any transaction that does not sum to zero at commit, and an
+immutability trigger blocks `UPDATE`/`DELETE` on posted entries. A daily float check pauses
+point movements if anything disagrees, and balance corrections need **two different admins**.
+
+**One router, declared once.** Each endpoint declares its auth mode (public, session + roles,
+cron token, sensor token or signed device), its zod schemas and its rate limit. A single catch-all
+route hands every request to `src/server/http/router.ts`, which enforces all of it, maps Postgres
+errors to clean API errors, and generates [docs/API.md](docs/API.md) and `openapi.json`.
+
+**Security built in, not bolted on.**
+- Salted scrypt passwords and SHA-256-hashed session tokens in `__Host-` cookies.
+- Role-based idle timeouts: 15 min for staff, 30 min for others, none for guards on shift, a 12 h cap for everyone.
+- A per-request CSP nonce with `strict-dynamic`, and a same-origin check on every write.
+- AES-256-GCM encryption for visitors' ID numbers, and HMAC-signed records from recycling machines and locker gateways.
+- OpenID Connect (PKCE, RS256) sign-in for courier companies.
+- Two-person approval for risky actions, an audit trail, PDPA data export and deletion, and scheduled retention deletes.
+
+**An AI agent that cannot go rogue.** The resident Assistant (Anthropic or OpenAI, via plain
+`fetch`) uses 9 tools over the resident's own data and checked township facts. It cites
+sources, takes actions such as creating a visitor pass **only after the resident confirms**, can
+never decide a flood alert, and falls back to deterministic rules when the AI is off, slow or over
+its daily limit.
+
+**Flood alerts with a second opinion.** The Banjir agent fuses water-level sensors, CCTV readings
+(pluggable: your own CNN endpoint → hosted vision model → labelled test set), rain gauges and
+resident reports. **Two independent signals must agree** before a warning goes out. A
+one-signal draft waits for a duty officer, and a different staff member must confirm it.
+
+**Hardware-ready, vendor-neutral.** Smart lockers, recycling kiosks and flood sensors run on
+built-in simulators that use the **same signed contracts** real devices would. Nothing is mocked
+in the business logic.
+
+**Inclusive by default.**
+- *Simple Mode* (four big buttons and step-by-step forms), an independent *Accessible view*, and read-aloud.
+- Flash-and-vibrate alerts, carer links, and a priority help list for floods.
+- 19 animated "See how it works" walkthroughs that respect `prefers-reduced-motion`.
+- Layout-matched skeletons that show after 150 ms and stay at least 600 ms.
+
+**Runs anywhere.**
+- `npm run db:setup` works with zero installs, using in-process PostgreSQL (PGlite).
+- For production: a multi-stage Docker image (non-root, health-checked), `docker compose` with PostgreSQL 16, and CI/CD that publishes to GHCR.
+- Optional Upstash Redis for rate limits and the session cache, with automatic fallback to Postgres. Money never touches Redis.
+
+---
+
+## What each role can do
+
+A short summary. **Every screen, tab and action is listed in [docs/FEATURES.md](docs/FEATURES.md).**
+
+| Role | Highlights |
+| --- | --- |
+| **Resident** | Live *Today* card. Points & XP wallet with a member QR, badges and a street league. Recycle at smart kiosks, or book a home collection. GPS-tracked walking and cycling loops. Report problems with a photo and add *Me too* to existing ones. Neighbourhood events, help and lending. Flood status with *I'm safe / I need help*. Akses+ access needs and carers. Visitor passes. Private locker door and guardhouse parcels. Book vetted plumbers and air-con companies. Bilingual AI Assistant. |
+| **Shop** | Counter: give points, accept points (the customer confirms on their own phone), apply a Shop Offer. Offers with budgets, days and hours. Sales with refunds. Weekly statements. Akses-friendly badge. |
+| **Home-service company** | Booking inbox. Accept with a visit time and assign a registered worker, which issues an automatic gate pass. Mark arrived and done, then the resident confirms and reviews. Choose trades, with a licence check for licensed work. Manage workers. |
+| **Sponsor** | Tier card with benefits and allowance. Funded campaigns with a budget split. Results shown only as grouped totals once a minimum group size is reached. |
+| **Gate guard** | Scan visitor passes. Record visitor details (ID, transport, licence expiry, reason). Walk-ins with *Expected / Not expected / Call me*. SOS calls, patrol rounds, flood help tasks, and accessibility fixes for their team. |
+| **Guardhouse staff** | Parcel counter: log parcels with a photo, confirm courier drop-offs, hand over against a one-time code. A searchable register with each parcel's history, call-due list and notes. |
+| **Courier / manager** | Scan a label and the courier company confirms the shipment. The recipient is matched and masked. A private locker door opens, with a fallback to the guardhouse. Managers add, suspend and reconfirm their own couriers. Couriers can also sign in through their company's own sign-in (OIDC). |
+| **Township staff** | Insights, the Lapor queue, the incident case board with deadlines, the parcel operations centre, the flood agent queue and sensors, kiosks, loops, recycling collections, access places, Komuniti moderation, campaigns, and resident verification. |
+| **Township admin** | Everything staff do, plus approving shops, licences and courier companies, float checks, settlements and two-person corrections, the locker policy, case assignment, and the audit trail. |
+| **SDP HQ admin** | Every township, plus programme rules, sponsor tier payments, and creating admin and sponsor accounts. |
+
+---
+
+## Quick start (5 minutes)
+
+You need **Node.js 22.23.4+ (or 24.22.1+)**. Nothing else: the default database is an in-process
+PostgreSQL (PGlite).
 
 ```bash
+git clone https://github.com/nurinirdnz/SimeTown.git
+cd SimeTown
 npm install
 cp .env.example .env          # the defaults work as they are
 npm run db:setup              # creates the tables and the demo township
@@ -29,315 +135,96 @@ npm run dev                   # open http://localhost:3000
 `db:setup` prints the demo accounts and **the password it generated for them**. To choose the
 password yourself, set `SEED_DEMO_PASSWORD` in `.env` (10+ characters) before running it.
 
-| Sign in as | Email | What you see |
-| --- | --- | --- |
-| Resident (main demo) | `aisyah@demo.kita.test` | Today card, Points & XP (cash- and offer-backed), Kitar with the smart machine, Gerak map tracking, Tamu, Lapor, Jiran, Kongsi, Banjir, Akses+, Assistant, SimeTown Home (book a plumber, see who is coming, review) |
-| Resident in Simple Mode | `zainab@demo.kita.test` | Simple Mode's four big buttons; on the flood priority help list; Mei Ling is her carer |
-| Resident with a visitor waiting | `daniel@demo.kita.test` | A walk-in at the main gate waiting for his answer in Tamu |
-| Shop | `kafe@demo.kita.test`, `kedai@demo.kita.test` | Counter with Shop Offers, offers page, sales, weekly statements |
-| Home service company | `plumber@demo.kita.test`, `aircon@demo.kita.test` | Booking inbox, accept with a visit time, assign a registered worker, services and workers |
-| Shop and home services | `kemas@demo.kita.test` | Both menus on one business account: the counter and offers, and bookings |
-| Guard | `guard@demo.kita.test` | The main gate: scan passes, walk-ins, SOS calls, patrol round, flood tasks; the guardhouse: parcels left with the guard and smart locker parcels kept there, in one register |
-| Courier | `courier@demo.kita.test` | Faizal, J&T Express (simulated): managed by J&T, delivers to the smart lockers. Also `hairul@` (J&T) and `nurul@` (Ninja Van) |
-| Courier (suspended) | `courier2@demo.kita.test` | Ahmad Zaki: suspended by Ninja Van, so he cannot deliver |
-| Courier company manager | `jnt-manager@demo.kita.test` | Kavitha, J&T Express: adds, suspends and reconfirms J&T's couriers (`ninjavan-manager@` for Ninja Van) |
-| Courier (company sign-in) | staff number `SPX-3001` | Lim Wei Jie, Shopee Express: *Sign in with your courier company* on the sign-in page (simulated); `SPX-3002` is suspended by Shopee |
-| Shop, not yet approved | `bengkel@demo.kita.test` | The "waiting for approval" state |
-| Sponsor | `sponsor@demo.kita.test` | Its Green Champion tier, own campaigns and grouped results |
-| Township staff | `staff@demo.kita.test` | Insights, report queue, home service reports, the flood agent, kiosks, smart machines, patrol points and access places |
-| Township staff (second) | `staff2@demo.kita.test` | Mei Chen: a second person in the township office, so a case can be moved from Ravi to her |
-| Township admin | `admin@demo.kita.test`, `admin2@demo.kita.test` | Everything staff see, plus shops, money and corrections |
-| SDP HQ admin | `hq@demo.kita.test` | Everything, plus the programme rules |
-
-Notes for local use:
-
-- Open the app at exactly the address in `APP_URL` (`http://localhost:3000`, not `127.0.0.1`).
-  Requests from any other origin are refused on purpose.
-- With the default PGlite database, stop `npm run dev` before running `db:*` or `job` scripts:
-  only one process can open it at a time. With a real PostgreSQL this limit does not apply.
+- Open the app at exactly `APP_URL` (`http://localhost:3000`, not `127.0.0.1`). Other origins are refused on purpose.
+- With PGlite, stop `npm run dev` before running `db:*` or `job` scripts (only one process can open it).
 - To start again from nothing, delete the `.data` folder and run `npm run db:setup`.
-- Every account needs a name, email and phone number; residents also need an address, chosen from
-  the township's property record, and shops a business address. Everyone accepts the
-  [Terms of Use](src/app/terms/page.tsx) and [Privacy Notice](src/app/privacy/page.tsx). Anyone
-  missing a detail is asked for it after signing in: sign in as `grace@demo.kita.test` to see it.
-- The legal texts' version and contact address live in [src/shared/legal.ts](src/shared/legal.ts).
-  Changing `version` asks everyone to accept the texts again.
+- For a shared demo, set `DATABASE_URL=postgres://…` (PostgreSQL 15+) or use Docker: see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-### Using a real PostgreSQL (recommended for a shared demo)
+Optional switches in `.env`:
 
-Set `DATABASE_URL=postgres://user:password@host:5432/dbname` in `.env` (PostgreSQL 15+), then
-`npm run db:setup`. Or use Docker: see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
----
-
-## 2. The demo: one day in the Township of Tomorrow
-
-Open two browser windows (one normal, one private) so you can be the resident and the shop at once.
-
-1. **Kitar.** As Aisyah, open *Kitar*, pick "Plastic, PET", enter a kiosk code and a weight.
-   (Codes: sign in as staff → *Kiosks & trails* → *Poster*. Scanning the poster's QR code opens the
-   page with the code filled in.) She earns Impact XP; during a funded challenge she also earns
-   points, and the screen says which sponsor paid.
-2. **Gerak.** Scan both checkpoints of *Elmina Central Park Walk* on the same day to complete it.
-3. **SimeTown Merchant.** As the café, enter Aisyah's member code (her wallet → *Show my code*) and a
-   RM20 bill: she earns 20 points. As the grocer, enter RM20 and switch on *Customer wants to use
-   points* → 300. Aisyah's phone asks her to confirm; the grocer's screen updates by itself and its
-   statement shows RM3 due this week.
-4. **Lapor.** Report a broken street light with a photo. It is sorted as "Lighting, medium urgency";
-   staff see it in their queue and can correct the suggestion (the correction is logged).
-5. **Jiran and Kongsi.** Join the gotong-royong; give away an item and confirm the handover.
-6. **Banjir.** As staff, open *Flood sensors* and drag Elmina Valley 1 & 2 past 90%. Within 15 seconds
-   a danger warning takes over Aisyah's screen with the safe route.
-7. **SimeTown Insights.** The SDP dashboard has changed all day, with the float matched to the sen.
-
-### The third edition's features
-
-8. **Smart recycling machine.** As staff, open *Kiosks, machines & trails* → *Smart machines* →
-   *Open the machine screen* (a tablet in a real demo). Scan its QR code with Aisyah's phone, or
-   type her member code under "Camera: read a SimeTown QR". Drop items with the sensor buttons, try
-   "Camera sees a different material", then *Finish*. Aisyah's Kitar screen follows item by item;
-   the session earns XP and offer-backed points. *Recycle as guest* gives a claim code instead.
-9. **Shop Offers.** As the grocer, the counter now has *Customer wants to use your Shop Offer*
-   (RM2 off, all day). Aisyah confirms on her phone, pays RM18 of a RM20 bill, and the shop's
-   statement shows the 10% success fee. *Shop Offers* in the shop's menu sets terms and budgets.
-10. **Gerak map tracking.** In *Gerak*, switch on *Test mode: play back a route instead of GPS* and tap *Start*: the
-    trip follows the Elmina Central Park Walk on the map, checkpoints tick themselves, then *Finish*. On a phone
-    outdoors, leave the demo switch off and real GPS is used.
-11. **Tamu.** As Aisyah, create a pass and share it (WhatsApp, SMS or link). Open the link in a
-    private window: that is the visitor's view. As the guard, type or scan the code: Aisyah is told
-    her visitor arrived. As Daniel, answer the walk-in waiting at the gate.
-12. **Banjir agent.** As staff, open *Flood agent*. Move a zone's sensor past 75%: only one signal,
-    so a draft waits for the officer. Click a CCTV test picture near the warning line: two signals
-    agree and the warning goes out. Push the sensor past 90%: a danger draft starts a 3-minute
-    countdown. Residents check in "I'm safe"; the priority help list appears for duty staff.
-    The public page is at `/status`.
-13. **Akses+, Assistant, SimeTown Home, Bahasa Malaysia.** Sign in as Zainab for Simple Mode.
-    Ask the Assistant “What homes is Sime Darby
-    selling in Elmina?” or “Make a visitor pass for Ali tomorrow”, then answer the question it hands over
-    under *Assistant questions* as staff. The *EN/BM* switch in the top bar changes the language.
-14. **SimeTown Home: book a home service.** As Aisyah, open *SimeTown Home*, choose *Plumbing*, compare
-    the companies (ratings and call-out fees are shown first) and book Elmina Plumbing Co. with a photo.
-    As `plumber@`, open *Bookings*: the resident's address appears only after you accept. Accept with a
-    time and assign Ahmad. As Aisyah, see Ahmad named before the visit and send him a Tamu gate pass
-    (the company sees the code). As the plumber, mark the worker arrived and the work done; as Aisyah,
-    confirm and review, or report a problem privately. As staff, open *Home service reports*: the report
-    names the worker assigned at the time, with the booking's full history. The company never sees it.
-    Aisyah's *Home logbook* shows her air-conditioner service as due soon: *Book again* rebooks the same company.
-
-### The hackathon brief's PEOPLE and PLANET problems
-
-15. **One reporting channel.** As Aisyah, open *My requests*: every report, parcel and collection
-    in one list, with where it stands. In *Lapor*, start a report about a blocked drain
-    behind Jalan Metafasa: the open report appears under *Already reported?*; tap *Me too* instead of
-    filing a second one. As staff, *Reports* shows the duplicates avoided, reports past their target
-    date and the median time to fix; set who is fixing a report and by when, and add a photo of the fix.
-16. **Secure parcel collection.** As the guard, open *Parcels*, log a parcel for No. 1 Jalan Metafasa
-    U16/171 with a shelf and a photo. Aisyah's *Parcels* screen shows the one-time code (and its QR).
-    Scan or type it at the guard's screen, check the photo, hand it over: the code stops working.
-    *Not me?* queries a handover; staff see the time to collect and the queried handovers.
-17. **Recycling guide and collections.** In *Kitar*, type “minyak” or “pizza box” under *Can I recycle
-    this?*, then *Book a collection* with a partner collector. Staff confirm it under *Recycling
-    collections* (the collector's gate pass is made automatically) and record the weight.
-
-### Smart parcel lockers
-
-Every home has **its own private locker door** in the bank serving its precinct: *Elmina Valley
-Locker A* (Elmina Valley 1–3), *Elmina Gardens Locker B* and *Elmina West Locker C*. A parcel that
-cannot go into the door waits at the **Main guardhouse** (open 8:00 am – 10:00 pm), with the parcels
-couriers leave straight with the guard. Every guardhouse parcel follows the same rules: overdue after
-7 days, a reminder once a week, the guard asked to call at 14 days. Nothing is ever moved out of a door,
-nothing is sent back by itself, and no fees are charged. Parcel cases are worked in *Lapor*.
-
-18. **Deliver.** As the courier, open *Deliver*, choose *Elmina Valley Locker A*, type a tracking
-    number, pick a size and give Aisyah's delivery code (her wallet → *Show my code*). Her home's own
-    door opens; tap *Shut the door with the parcel inside* (a simulated station). Aisyah is told.
-19. **Collect.** As Aisyah, *Parcels* shows her door, whether the guardhouse is open now, the QR code
-    and the PIN. Type the PIN on the station's keypad in the console's simulator, or enter the station
-    code in the app and tap *Open my door*, then *Take it and shut the door*. The *Guardhouse* tab
-    shows everything waiting for her there (days uncollected, overdue, *My late collections*), and the
-    *About* tab explains doors, the guardhouse, reminders and late collections.
-20. **The door cannot take it.** Deliver a second parcel for Aisyah while her door is full, or an M
-    parcel too big for a door: the courier is told why and shown the guardhouse (or, after 10 pm, keeps
-    it for the next round). *It will not go into this door* lets the courier choose a reason, or write
-    their own. As the guard (`guard@`), *Parcels*: confirm courier drop-offs, log parcels left with
-    you, hand any parcel over with one code check, and work the **guardhouse register** (search,
-    filters, each parcel's history). Hafiz's and Priya's parcels have waited over 14 days, so a call
-    is due: open one and add a note. Siti's shelf parcel was sent back on request, with the reason in
-    its history. Aisyah's *My late collections* lists the parcel she collected after 9 days.
-21. **Staff and admins.** *Parcels → Today* lists what needs action now (calls, couriers bringing
-    parcels, overdue parcels, doors to check); *Guardhouse* is the same register as the guard's, with
-    the figures on top; *Performance* covers all three locker banks (Locker C is used by Nurul Izzah
-    and Rajesh in Elmina West) and the guardhouse. Parcel cases are under *Lapor → Parcel & locker
-    cases*. Under *Manage*: *Stations → Doors* shows which home has which door (admins free the door of
-    a home that moved out), *Guardhouses* sets opening hours and room, and *Locker policy* sets the
-    reminder timings, with planned features shown as *Planned · not active*. In the simulator, jam a door or take the
-    station offline, then try a delivery: nothing is confirmed and the courier is told what to do.
-
-### Parcel emails (optional)
-
-The four parcel emails (in your locker, at the counter, the weekly overdue reminder, and a door opened
-without a code) are queued with their notifications and sent by the `lockers` job. To send them for
-real, add the mail account to `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`; see
-[docs/EMAIL_DESIGN.md](docs/EMAIL_DESIGN.md) §7 for Gmail App Passwords) and restart. Demo accounts
-use `@demo.kita.test` addresses, which are never sent to: to try it, register a resident with your
-own email, have staff confirm the home, and deliver a parcel to them. Residents switch parcel
-emails off under *Account › Emails*.
-
-### The courier platform (simulated courier companies)
-
-J&T Express, Ninja Van and Shopee Express here are **simulated**: SimeTown is not connected to any
-courier company, and every tracking number (`JTSIM…`, `NVSIM…`, `SPXSIM…`) is fictional. Open
-`/demo/labels` on a computer to see the labels (scannable with a phone's camera, or type the number).
-
-22. **Barcode first.** As Faizal (`courier@`), *Deliver* → *Elmina Valley Locker A*, scan or type
-    `JTSIM10000001`. J&T (simulated) confirms the shipment and that Faizal carries it (high
-    assurance); SimeTown matches Aisyah by phone, name and address and shows her details masked. No
-    delivery code is needed and no township admin approved Faizal: J&T's manager added him. *Open a
-    locker*, shut the door with the parcel inside; Aisyah is told and collects with her PIN as in step 19.
-23. **Replays and copied labels.** Scan `JTSIM10000001` again: *Already delivered*, no door opens,
-    the attempt is logged and staff see an incident. `JTSIM10000009` is already in a locker (same
-    result). `JTSIM10000008` is carried by another courier: refused, a high-severity incident.
-    `JTSIM99999999` is unknown to J&T, `JTSIM10000004` is being delivered by Hairul,
-    `JTSIM10000005` names someone who does not live at the address, `JTSIM10000006` goes to an
-    unregistered home, and `JTSIM10000007` needs a signature: each is refused for its own reason.
-24. **Medium assurance, outage and fallback.** As Nurul (`nurul@`), `NVSIM20000001` is verified for
-    Daniel by address and name; Ninja Van cannot say who carries it (medium assurance). As admin,
-    *Couriers & companies* → Ninja Van → *Simulate an outage*; Nurul scans `NVSIM20000003`, and may
-    use Mei Ling's delivery code instead (recorded as low assurance).
-25. **The company manages its couriers.** As Kavitha (`jnt-manager@`), *Team*: add a courier with a
-    staff number (they get a set-password link), suspend Hairul (his session ends at once), reconfirm
-    Faizal. As Ahmad (`courier2@`), *Deliver* says Ninja Van has suspended him.
-26. **Signing in through the company.** Signed out, choose *Shopee Express (simulated sign-in)* on
-    the sign-in page, pick Lim Wei Jie (`SPX-3001`) and the demo password: SimeTown checks the
-    company's signed token and creates his courier account on first sign-in. `SPX-3002` is refused
-    by the company itself. `SPXSIM30000001` is matched by the delivery code Zainab gave the shop.
-27. **Staff.** As admin: *Couriers & companies* (approve, suspend, stations, agreement, assurance,
-    representatives, access history), *Shipment checks* (every scan and its outcome, repeated scans,
-    each company's system health, and the simulated companies' shipments and staff to change), and
-    *Cases* (how many locker and courier cases are open, with a link to them in *Incidents & reports*;
-    reporting a locker problem; opening an occupied door, asked under *Parcels* and approved by a
-    second admin, `admin2@`). In the simulator, *Replay a used command* is refused.
-
-
-### Incidents and reports
-
-Every parcel, the gate page and the courier station have a *Report* button. SimeTown decides who
-should handle the problem: the courier company, or the township office. Township cases go to
-*Incidents & reports* (`/console/incidents`), the one place they are worked: each has one person
-handling it and a deadline, and the system escalates what nobody takes or what runs late. The
-*Smart lockers* and *Parcels* pages only show how many are open, with a link that opens the board
-already filtered. Residents follow their
-reports under *Parcels → My reports*. The courier companies' support channels are simulated.
-
-28. **A. A late parcel belongs to the courier.** As Aisyah, *Parcels* → *A parcel hasn't arrived?*,
-    choose *My parcel is late* and enter `JTSIM10000002`. J&T (simulated) confirms it is hers and on
-    its way, so SimeTown shows J&T's support channel and the tracking number to copy. No township
-    case is opened and no staff member is told. (*Send it to J&T for me* files a simulated ticket.)
-29. **B. A locker door will not open.** As Aisyah, on a parcel waiting in a locker, *Report a
-    problem* → *The door will not open*. It becomes a township case at once, with the locker's
-    door history attached. Staff work it under *Incidents & reports*; *Smart lockers → Today* lists
-    it as urgent and *Smart lockers → Cases* counts it, both linking there.
-30. **C. A critical case escalates.** As admin (Nurul Huda, `admin@`), *Incidents & reports*: the
-    door forced open at Locker A 25 minutes ago is critical, nobody has taken it, and the admins have
-    already been told. Running the checks again (*Deadlines* → *Run the deadline checks now*) does
-    not tell them twice.
-31. **D. "I didn't collect this."** As Aisyah, on a collected locker parcel, *Report* → *I didn’t
-    collect this*. SimeTown first shows what its records say (how the door was opened); *Please
-    investigate* opens a case. An earlier dispute of hers is already resolved under *My reports*,
-    with the outcome and *Not fixed? Reopen it*.
-32. **E. Moving a case.** Daniel's locker door would not open; Ravi (`staff@`) took it and is
-    investigating. As admin, open it and *Reassign* → Mei Chen, with a reason. The history keeps
-    both, and Mei Chen is told. A new case shows *I’ll handle this*; if two staff press it at once,
-    only one gets the case.
-
----
-
-## 3. What is in the box
-
-| Layer | Feature | Working here |
-| --- | --- | --- |
-| Core | SimeTown ID | Register against a unit, staff or owner confirms the home, seven roles (with Guard), invitations, guest pages (`/guest`, `/status`, `/partners`), English and Bahasa Malaysia (partial) |
-| Core | Points & XP | One balance with two kinds of backing (cash in the float; shops' monthly pledges), "You saved", every amount in ringgit, history, levels, badges, street league, confirm-on-phone |
-| Core | Today card | Changes through the day: flood level, a visitor at the gate or expected, a shop offer nearby, collection day |
-| Core | SimeTown Assistant | An AI agent (OpenAI or Anthropic) that answers from the resident's own data and checked facts about City of Elmina, with sources; makes a visitor pass or hands a question to the township office only after the resident confirms; never decides an alert. Without an AI key, fixed rules answer from the same tools |
-| People | Tamu | Visitor passes by link (no app for the visitor), guard screen with camera scan, walk-ins with Expected / Not expected / Call me, SOS, patrol rounds, flood task list, 90-day deletion |
-| People | Akses+ | Private access needs with consent, Simple Mode, read-aloud, flashing alerts, carer links, step-free places, priority help list for floods |
-| People | Jiran | Events with places, help board, XP when the organiser or asker confirms |
-| People | Lapor | Report with photo, suggested type and urgency, staff queue, access-barrier type; live progress (checked, assigned with a target date, fixed with a photo), late flags, “Me too” instead of duplicate reports, time-to-fix figures |
-| People | My requests | One list of everything a household is waiting on: reports, parcels and collections, each with its next step; the Assistant can read it |
-| People | Parcels | Guard logs parcels with shelf and photo; the household gets a one-time code (and QR) the guard never sees; handover only against the code; “Not me?” queries; the guardhouse rules (overdue at 7 days, weekly reminders, a call at 14 days, never sent back by itself); a register with each parcel's history; 90-day deletion |
-| People | Courier platform | Courier companies approved once per township; their own managers or their own sign-in (OpenID Connect) add and suspend couriers; the label's barcode checked with the (simulated) company; households matched automatically and shown masked; a shipment deposited once, ever; signed, expiring, single-use unlocks; incidents, staff exceptions with a second approver, a risk register |
-| People | Smart lockers | Multi-courier delivery with approval per station, recipient verification without revealing residents, one private door per home claimed atomically with its first parcel, one-time pickup PIN or QR (never stored), gentle weekly reminders outside quiet hours, a guardhouse parcel counter with opening hours, overdue tracking, guard calls and notes, no fees, live capacity, a plain forecast, an interactive simulator and a signed hardware gateway contract |
-| People | Gerak | Live map tracking with checkpoints that tick themselves, speed bands, near-home trimming, 30-day route deletion; QR checkpoints as the backup; demo playback |
-| Planet | Kitar | Smart machine: rotating screen code, SimeTown QR or guest, camera + barcode + weight agreement, signed records, guest claim codes; kiosk drop-off with a photo check as the backup; “Can I recycle this?” guide in English and Malay; collections booked with partner collectors, with the gate pass made on confirmation; material accepted by month and why machines turned items away |
-| Planet | Kongsi | Give away and lend, XP on confirmed handover |
-| Planet | Banjir | The agent: sensor, CCTV test pictures, rain gauge and resident reports; two signals must agree; one-signal drafts with 3- and 5-minute windows; 15-minute updates; four-line messages; check-ins; public status page |
-| Business | SimeTown Merchant | Shop Offers with the shop's own terms and monthly cap, 10% success fee, new and returning customers, Akses-friendly badge; give and accept points, refunds, weekly statement |
-| Business | SimeTown Partner Hub | Four sponsor tiers with a public Partners page and one labelled banner; campaigns with a prefunded pool and grouped results |
-| Business | SimeTown Insights | 30-day totals, the float against what it owes, machine uptime, offer pledges, visitors, flood alerts and barriers fixed on time; printable monthly report |
-| Business | SimeTown Home | Home services: residents compare approved township companies (ratings, pricing and call-out fees up front), book with a photo, see the assigned worker before arrival, send a Tamu contractor pass, confirm the job and review it, or report privately to staff. Companies are Merchant accounts with services switched on (shop, services, or both). Prices are agreed in person; SimeTown takes no payment. The home logbook records every confirmed job at the home and reminds when a service (air-conditioning, every 180 days) is due, with *Book again*. Warranty records and resale are still previews |
-
-Also built because a real system needs them: Komuniti moderation (reports with reasons, keep/hide/remove, suspensions by township admins and HQ), the daily float check,
-weekly settlement, points expiry and reminders, two-person approval for balance corrections, an
-audit trail, adjustable programme rules, data download and account deletion.
-
-**Shown as a preview, and labelled so:** SimeTown Home warranty and defect records, resale and rental, and new launches.
-
-**Simulated, and labelled so in the app:** no real money moves (deposits and settlements are
-ledger entries an admin records); the recycling machine is a tablet page whose buttons stand in for
-its camera, barcode reader and scale (its signed records and their checks are real); flood sensors,
-CCTV and the rain gauge are a simulator and a fixed test set of pictures; Gerak can play back a
-route instead of GPS outside production; the sample bill is generated by the app; car park occupancy
-is simulated until bay sensors exist; smart lockers run on the built-in simulator until real hardware is connected
-through the gateway contract (no locker vendor's API is built in); WhatsApp and SMS
-open the phone's own apps; there is no e-mail or one-time code. Bahasa Malaysia covers navigation,
-the home screen, Simple Mode, Tamu and flood alerts.
-
-**Adding the third edition to an existing demo database:** `npm run db:migrate` then
-`npm run db:seed`. On a database that already holds the demo township, the seed only adds what the
-new features need (the guard, offers, machines, map, tiers…) and changes nothing else.
-
----
-
-## 4. Commands
-
-| Command | What it does |
+| Setting | What it turns on |
 | --- | --- |
-| `npm run dev` | Development server |
-| `npm run build` / `npm start` | Production build and server |
-| `npm test` | All 222 tests, on in-process PostgreSQL |
-| `TEST_DATABASE_URL=postgres://… npm test` | The same tests on a real server (this **empties that database**) |
-| `npm run lint` / `npm run typecheck` / `npm run check` | Code checks (`check` runs lint, types and tests) |
-| `npm run db:migrate` | Apply new migrations |
-| `npm run db:seed` | Load the demo township (refuses when `APP_ENV=production`) |
-| `npm run bootstrap -- <file.json>` | Set up a real township: zones, homes and the first admin's invitation link (see `docs/bootstrap.example.json`) |
-| `npm run job -- <name>` | Run `expire-points`, `float-check`, `settle`, `cleanup` or `flood-agent` once (`flood-agent` every minute or two in a pilot; `cleanup` also applies the 90-day and 30-day deletions) |
-| `npm run docs:api` | Regenerate `docs/API.md` and `docs/openapi.json` from the route table |
+| `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL` | The hosted AI Assistant and photo and report classification |
+| `SMTP_*` | Real emails: welcome, password reset, parcel and visitor notices |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Redis rate limits and the session cache |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | A Google basemap for Gerak, instead of the built-in township map |
+| `FLOOD_MODEL_URL` | Your own CCTV water-level model |
 
 ---
 
-## 5. Where things are
+## Demo accounts
+
+Every account uses the **same password** printed by `db:setup` (or your `SEED_DEMO_PASSWORD`).
+Every email ends in **`@demo.kita.test`**.
+
+| Role | Sign in as | Who / what you'll see |
+| --- | --- | --- |
+| Resident (main demo) | `aisyah` | Aisyah Rahman, owner of No. 1 Jalan Metafasa U16/171 (Elmina Valley 1). Every resident feature has data |
+| Resident | `daniel` | Daniel Tan, a neighbour: a walk-in visitor is waiting at the gate for his answer |
+| Resident (Simple Mode) | `zainab` | Zainab Yusof: Simple Mode, on the flood priority help list, with Mei Ling as her carer |
+| Resident (carer) | `meiling` | Lim Mei Ling: cares for Zainab in Akses+ |
+| Residents (neighbours) | `priya`, `hafiz`, `siti`, `arjun`, `karyan` | Neighbours with reports, *Me too*s, parcels and Komuniti posts |
+| Residents (Elmina West) | `izzah`, `rajesh` | Flat owners in Pangsapuri Harmoni Elmina, served by Locker C |
+| Resident (tenant, pending) | `imran` | Imran Hakim: a tenant of Aisyah's home, waiting for her to confirm him |
+| Resident (not yet confirmed) | `grace` | Grace Chong: waiting for the township office, and asked to add a phone number |
+| Shop | `kafe`, `kedai` | Kafe Seri Pagi and Kedai Runcit Mesra: counter, Shop Offers, sales, statements |
+| Shop (not approved) | `bengkel` | Bengkel Basikal Roda: the "waiting for approval" state |
+| Home services | `plumber` | Elmina Plumbing Co. (workers Ahmad and Lim), with an electrical licence check waiting |
+| Home services | `aircon` | Sejuk Aircon Services |
+| Shop **and** home services | `kemas` | Kemas Home Care: both menus on one business account |
+| Sponsor | `sponsor` | Solar Cerah: Green Champion tier, campaigns and grouped results |
+| Gate guard | `guard` | Azman Shah: visitor passes, walk-ins, SOS, patrol, flood duty |
+| Guardhouse staff | `guardhouse` | Nur Aina: guardhouse parcel counter and register |
+| Courier (J&T, simulated) | `courier`, `hairul` | Faizal Rahman and Hairul Azman: barcode-checked locker deliveries |
+| Courier (Ninja Van, simulated) | `nurul` | Nurul Ain: medium-assurance shipments, company outage fallback |
+| Courier (Pos Laju) | `poslaju` | Rahim Osman: a township-approved courier for every locker bank |
+| Courier (suspended) | `courier2` | Ahmad Zaki: suspended by Ninja Van, cannot deliver |
+| Courier-company manager | `jnt-manager`, `ninjavan-manager` | Kavitha Raman (J&T) and Tan Wei Ming (Ninja Van): manage their own couriers |
+| Courier via company sign-in | staff no. `SPX-3001` | Lim Wei Jie, Shopee Express: *Sign in with your courier company* on the sign-in page (`SPX-3002` is refused by the company) |
+| Township staff | `staff`, `staff2` | Ravi Kumar and Mei Chen: work cases, hand them between each other |
+| Township admin | `admin`, `admin2` | Nurul Huda and Jason Lee: approvals, money and the second-approver flows |
+| SDP HQ admin | `hq` | Farah Aziz: every township and the programme rules |
+
+➡️ **A guided 30-minute demo script, and what to try with each account, is in
+[docs/DEMO_TESTING.md](docs/DEMO_TESTING.md).**
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser["Browser (phone-first PWA-style UI)"]
+    R[Resident] & B[Shop / Services] & S[Sponsor] & G[Guard / Guardhouse] & C[Courier] & O[SDP console]
+  end
+  Browser -->|"/api/v1/* (same-origin, CSP nonce)"| Router
+  subgraph Next["Next.js 16 server"]
+    Router["Typed router<br/>auth · roles · zod · rate limits"] --> Modules["23 feature modules<br/>routes.ts + service.ts"]
+    Modules --> Ledger["Double-entry ledger"]
+    Jobs["12 scheduled jobs<br/>float check · settle · lockers · flood agent · emails · cleanup"]
+  end
+  Modules & Ledger & Jobs --> PG[(PostgreSQL 15+ / PGlite)]
+  Router -.optional.-> Redis[(Upstash Redis<br/>rate limits, session cache)]
+  Modules -.optional.-> AI[Anthropic / OpenAI]
+  Jobs -.optional.-> SMTP[SMTP outbox]
+  Devices["Lockers · kiosks · flood sensors<br/>(HMAC-signed)"] -->|/ingest| Router
+  IdP["Courier company IdP<br/>(OIDC + PKCE)"] <--> Router
+```
 
 ```
 src/
-  app/                    Screens and the one API entry point (Next.js App Router)
-    api/v1/[...path]/     Hands every API request to the router in src/server
-    app/ merchant/ sponsor/ console/      One folder per role's area
-  components/
-    ui/                   The design system: buttons, fields, dialogs, tables, charts, toasts
-    shell/                Navigation frame, notifications, flood danger takeover
-    features/             Pieces shared by several screens
-  lib/                    Browser-side API client, hooks, formatting
-  server/                 The backend. Nothing in here imports from app/ or components/
-    http/                 Router (auth, roles, validation, rate limits, errors), OpenAPI
-    auth/                 Passwords, sessions, role helpers
-    db/                   Database client, migration runner, migrations/*.sql
-    modules/<feature>/    routes.ts (who may call what) + service.ts (rules and SQL)
-    modules/ledger/       The double-entry points ledger
-  shared/domain.ts        Words both sides use: roles, activities, categories
-scripts/                  migrate, seed, job, API docs
-tests/                    One test per business rule, plus API and concurrency tests
-docs/                     Architecture, business rules, security, deployment, API
+  app/                 88 screens (App Router) + one API entry point (api/v1/[...path])
+    app/ merchant/ sponsor/ guard/ guardhouse/ courier/ console/   one area per role
+  components/ui/       the design system: buttons, fields, dialogs, tables, charts, skeletons
+  components/features/ shared feature pieces, walkthroughs, maps, scanners
+  server/              the backend; never imports from app/ or components/
+    http/              router, OpenAPI, uploads, pagination
+    modules/<feature>/ routes.ts (who may call what) + service.ts (rules and SQL)
+    db/migrations/     52 SQL migrations
+  shared/              domain words both sides use: roles, categories, session rules
+scripts/               migrate, seed, bootstrap, jobs, API docs, i18n audit
+tests/                 39 suites: one test per business rule, API, concurrency, i18n
+docs/                  architecture, business rules, security, deployment, API, demo guide
 ```
 
 To follow one feature end to end, open `src/server/modules/<feature>/routes.ts`, then its
@@ -345,53 +232,64 @@ To follow one feature end to end, open `src/server/modules/<feature>/routes.ts`,
 
 ---
 
-## 6. Read next
+## Commands
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the assessment, the design, the database, the design and motion systems.
-- [docs/BUSINESS_RULES.md](docs/BUSINESS_RULES.md): BR1 to BR22, where each is enforced and which test proves it.
-- [docs/SECURITY.md](docs/SECURITY.md): what is protected and how, and what is still open.
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): environments, Docker, Cloudflare, scheduled jobs.
-- [docs/API.md](docs/API.md): every endpoint (also served at `/api/v1/openapi.json`).
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build and server |
+| `npm test` | The full test suite on in-process PostgreSQL |
+| `TEST_DATABASE_URL=postgres://… npm test` | The same tests on a real server (this **empties that database**) |
+| `npm run check` | Lint + type-check + tests |
+| `npm run db:migrate` / `db:seed` / `db:setup` | Apply migrations / load the demo township (refused in production) / both |
+| `npm run bootstrap -- <file.json>` | Set up a real township: zones, homes and the first admin's invitation (see `docs/bootstrap.example.json`) |
+| `npm run job -- <name>` | Run a job once: `expire-points`, `float-check`, `settle`, `cleanup`, `flood-agent`, `parcel-reminders`, `lockers`, `couriers`, `incidents`, `access`, `recycling`, `emails` |
+| `npm run docs:api` | Regenerate `docs/API.md` and `docs/openapi.json` |
+| `npm run i18n:audit` | List any interface text without a Malay translation |
 
 ---
 
-## 7. What was checked, and what was not
+## Documentation
 
-Checked while building (October 2026, Node 22, PostgreSQL 16):
+| Doc | What's inside |
+| --- | --- |
+| [FEATURES.md](docs/FEATURES.md) | Every feature, screen and action, role by role |
+| [DEMO_TESTING.md](docs/DEMO_TESTING.md) | Demo accounts, a guided demo script and flows that cross accounts |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design decisions, database, ledger, lockers, incidents, design and motion systems |
+| [BUSINESS_RULES.md](docs/BUSINESS_RULES.md) | Each business rule, where it is enforced and which test proves it |
+| [SECURITY.md](docs/SECURITY.md) | Threats, controls and known limits |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Environments, Docker, Cloudflare, scheduled jobs, hardware contracts |
+| [API.md](docs/API.md) | All 434 operations (also served at `/api/v1/openapi.json`) |
+| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md) · [EMAIL_DESIGN.md](docs/EMAIL_DESIGN.md) · [LANGUAGES.md](docs/LANGUAGES.md) | Notifications and deep links, transactional email, English/Malay |
+| [RISK_REGISTER.md](docs/RISK_REGISTER.md) | Courier-platform risks and mitigations |
+| [SimeTown-UI-UX-GUIDELINES.md](docs/SimeTown-UI-UX-GUIDELINES.md) · [CONSOLE_UI_HANDOVER.md](docs/CONSOLE_UI_HANDOVER.md) | UI, motion and skeleton standards |
+| [CONTRIBUTIONS.md](docs/CONTRIBUTIONS.md) | Nurin Irdina's contributions, from the git history |
 
-- Lint, type-check and production build pass.
-- 64 automated tests pass on in-process PostgreSQL **and** on a real PostgreSQL 16 server, including
-  five tests that fire requests at the same time (double spending, overdrawing a pool).
-- Every screen was opened in Chromium at phone and desktop sizes with no console or
-  Content-Security-Policy errors, and the main journeys (earn, spend with confirmation, drop-off,
-  report with photo, flood takeover) were run end to end in the browser.
-- An automated accessibility scan (axe-core, WCAG 2.2 A and AA rules) reports no violations on the
-  27 screens checked, each at phone and desktop size. Automated scans catch only part of accessibility; no screen-reader or
-  real-user testing was done.
-- The self-contained production server that the Docker image runs was started and exercised.
-- The ZIP was unpacked into an empty folder and taken through section 1 exactly as written
-  (`npm ci`, `.env.example`, `db:setup` on the zero-install database, checks, build, start), and
-  the browser journeys were run again against that copy.
+---
 
-Third edition (October 2026):
+## Honest status
 
-- 123 automated tests pass on in-process PostgreSQL, including 34 new tests for Shop Offers, the
-  recycling machine's signatures, Gerak tracking, the bill file gate, Tamu, the Banjir agent,
-  Akses+ and sponsor tiers.
-- Migration `004_third_edition.sql` and the seed were rehearsed on a copy of the previous database
-  and on an empty one (the seed was run twice to prove it changes nothing the second time), then
-  applied to the shared Supabase database; the float check passed afterwards.
-- A production build was run and every new endpoint and screen was exercised end to end against
-  it, with screenshots of each screen taken in headless Chrome and no browser errors.
-- Not checked for the third edition: the accessibility scan, real GPS outdoors, a real camera or
-  barcode reader on the guard screen, and the AI bill reader for photos.
+- **Simulated, and labelled so in the app:**
+  - Money (deposits and settlements are ledger entries recorded by an admin).
+  - The courier companies J&T Express, Ninja Van and Shopee Express, and their tracking numbers.
+  - Smart-locker hardware, the recycling-machine sensors, and the flood sensors, CCTV and rain gauge.
+  - SMS. Gerak route playback in test mode.
+- **Previews:** home warranty and defect records, resale and rental listings.
+- **Archived for now, with restore kits:** guided parking, Jimat energy bills and solar sites, and greener building materials ([docs/archive/](docs/archive/)).
+- **Not yet done:**
+  - No penetration test, load test, real-phone testing or deployment to a public host.
+  - The live AI call has not been exercised without a key (its fallbacks are tested).
+  - Rates such as 1 point per RM1 are the proposal's assumptions.
+  - See [SECURITY.md › Known limits](docs/SECURITY.md#known-limits).
 
-Not checked:
+---
 
-- Nothing was deployed. (Since October 2026 the Docker images build, and `docker compose` with
-  PostgreSQL 16 was run locally: all migrations applied, `/api/v1/ready` and `/api/v1/health`
-  answered, and `sharp` loads in the image. CD publishes the images; no host is set up yet.) The Cloudflare set-up in the deployment guide is a design, not a tested one.
-- The hosted AI call was not made (no key). Its request and fallback logic is written and the
-  fallback paths are tested; the live call is not.
-- No load test, no penetration test, no browsers other than Chromium, no real phones.
-- The rates (1 point per RM1, 15% fee, limits) are the proposal's **assumptions**, not validated figures.
+## Team
+
+Built by a student team for the Sime Darby Property University Hackathon 2026:
+
+- **Nurin Irdina** — [@nurinirdnz](https://github.com/nurinirdnz) · [contributions](docs/CONTRIBUTIONS.md)
+- **Nur Amira Izreena Azlan** — [@AmiraIzreena](https://github.com/AmiraIzreena)
+- **Syafiqah Wahidah** — [@syafiqahwahidah](https://github.com/syafiqahwahidah)
+- **Isabela Nur Sofea** — [@isabelanursofea](https://github.com/isabelanursofea)
+- **Christiano Claudio Christopher** — [@CTeno24](https://github.com/CTeno24)

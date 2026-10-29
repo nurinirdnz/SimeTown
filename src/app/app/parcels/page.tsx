@@ -47,7 +47,7 @@ function GuardhouseSkeleton() {
   return (
     <LocalizedDiv role="status" aria-label="Loading" aria-busy="true" className="space-y-6">
       <Skeleton className="h-4 w-3/5" />
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4">
         {[0, 1].map((i) => (
           <SkeletonCard key={i} className="overflow-hidden">
             <div className="flex items-start justify-between gap-3 border-b border-ink-100 p-5">
@@ -239,7 +239,8 @@ function ParcelsScreen() {
       <div className="min-w-0">
       <TabPanel>
       {tab === 'lockers' && <LockerParcels />}
-      {tab === 'about' && <div className="max-w-4xl"><ParcelAbout /></div>}
+      {/* Full width, like Kitar's and Gerak's About tabs: there is no guide column beside it. */}
+      {tab === 'about' && <ParcelAbout />}
       {tab === 'guardhouse' && <Async state={parcels} skeleton={<GuardhouseSkeleton />}>
         {(data) => {
           const waiting = data.parcels.filter((p) => p.status === 'WAITING');
@@ -247,47 +248,46 @@ function ParcelsScreen() {
           return (
             <div className="space-y-6">
               <p className="text-[15px] text-ink-600"><Text>Parcels the guard keeps for your home: left at the guardhouse by a courier, or too big for your locker door. Show the code to the guard to collect. They stay until you collect them.</Text></p>
-              <LockerParcels view="guardhouse" />
-              {waiting.length === 0 && lockerAtGuardhouse === 0 ? (
-                <EmptyState icon={Package} title="Nothing at the guardhouse"><Text>When a parcel is left at the guardhouse for your home, you are told at once and the code appears here.</Text></EmptyState>
-              ) : waiting.length > 0 && (
-                <div className="stagger-in grid gap-4 2xl:grid-cols-2">
-                  {waiting.map((p) => (
-                    <Card key={p.id} id={`parcel-${p.id}`} className={`scroll-mt-20 overflow-hidden ${parcelId === p.id ? 'ring-2 ring-brand-400' : ''}`}>
-                      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-100 p-5">
+              {/* Shelf parcels share the locker parcels' grid, so cards of both kinds line up in even rows. */}
+              <LockerParcels view="guardhouse">
+                {waiting.map((p) => (
+                  <Card key={p.id} id={`parcel-${p.id}`} className={`h-full scroll-mt-20 overflow-hidden ${parcelId === p.id ? 'ring-2 ring-brand-400' : ''}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-ink-100 p-5">
+                      <div>
+                        <p className="font-display text-lg font-bold text-ink-900"><Text>{`From ${p.courier}`}</Text></p>
+                        <p className="text-sm text-ink-500"><Text>{`Arrived ${timeAgo(p.loggedAt)}`}</Text>{p.trackingNo && ` · ${p.trackingNo}`}</p>
+                        <p className={cn('mt-1 inline-flex items-center gap-1.5 text-sm font-semibold', p.overdue ? 'text-warning-700' : 'text-ink-700')}><Clock className="size-4" aria-hidden /><Text>{p.days === 0 ? 'Under a day' : p.days === 1 ? '1 day uncollected' : `${p.days} days uncollected`}</Text></p>
+                      </div>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {p.overdue && <Badge tone="warning"><Text>Overdue</Text></Badge>}
+                        <Badge tone="gold"><Text>{`Shelf ${p.shelf}`}</Text></Badge>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-5 p-5">
+                      <QrCode value={`KITAPARCEL:${p.code}`} size={132} label="Collection code as a QR code" />
+                      <div className="min-w-0 flex-1 space-y-3">
                         <div>
-                          <p className="font-display text-lg font-bold text-ink-900"><Text>{`From ${p.courier}`}</Text></p>
-                          <p className="text-sm text-ink-500"><Text>{`Arrived ${timeAgo(p.loggedAt)}`}</Text>{p.trackingNo && ` · ${p.trackingNo}`}</p>
-                          <p className={cn('mt-1 inline-flex items-center gap-1.5 text-sm font-semibold', p.overdue ? 'text-warning-700' : 'text-ink-700')}><Clock className="size-4" aria-hidden /><Text>{p.days === 0 ? 'Under a day' : p.days === 1 ? '1 day uncollected' : `${p.days} days uncollected`}</Text></p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500"><Text>Collection code</Text></p>
+                          <p className="parcel-code text-3xl font-bold text-ink-900">{p.code}</p>
                         </div>
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          {p.overdue && <Badge tone="warning"><Text>Overdue</Text></Badge>}
-                          <Badge tone="gold"><Text>{`Shelf ${p.shelf}`}</Text></Badge>
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-5 p-5">
-                        <QrCode value={`KITAPARCEL:${p.code}`} size={132} label="Collection code as a QR code" />
-                        <div className="min-w-0 flex-1 space-y-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500"><Text>Collection code</Text></p>
-                            <p className="parcel-code text-3xl font-bold text-ink-900">{p.code}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button size="sm" variant="secondary" onClick={() => void share(p)}>
-                              <Share2 className="size-4" aria-hidden /><Text>Share the code</Text></Button>
-                            <Button size="sm" variant="ghost" onClick={() => setProblem({ parcel: p, context: 'GUARD_WAITING' })}><Flag className="size-4" aria-hidden /><Text>Report a problem</Text></Button>
-                          </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => void share(p)}>
+                            <Share2 className="size-4" aria-hidden /><Text>Share the code</Text></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setProblem({ parcel: p, context: 'GUARD_WAITING' })}><Flag className="size-4" aria-hidden /><Text>Report a problem</Text></Button>
                         </div>
                       </div>
-                      {(p.hasPhoto || p.note) && (
-                        <div className="space-y-3 border-t border-ink-100 p-5">
-                          {p.note && <p className="text-sm text-ink-700">{p.note}</p>}
-                          {p.hasPhoto && <LocalizedImg src={`/api/v1/parcels/${p.id}/photo`} alt="Photo of the parcel taken at the guardhouse" loading="lazy" className="max-h-48 w-full rounded-md border border-ink-200 object-cover" />}
-                        </div>
-                      )}
-                    </Card>
-                  ))}
-                </div>
+                    </div>
+                    {(p.hasPhoto || p.note) && (
+                      <div className="space-y-3 border-t border-ink-100 p-5">
+                        {p.note && <p className="text-sm text-ink-700">{p.note}</p>}
+                        {p.hasPhoto && <LocalizedImg src={`/api/v1/parcels/${p.id}/photo`} alt="Photo of the parcel taken at the guardhouse" loading="lazy" className="max-h-48 w-full rounded-md border border-ink-200 object-cover" />}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </LockerParcels>
+              {waiting.length === 0 && lockerAtGuardhouse === 0 && (
+                <EmptyState icon={Package} title="Nothing at the guardhouse"><Text>When a parcel is left at the guardhouse for your home, you are told at once and the code appears here.</Text></EmptyState>
               )}
 
               {past.length > 0 && (
