@@ -145,6 +145,9 @@ export const komunitiMalay: Record<string, string> = {
   'Open larger': 'Buka lebih besar', // native review
   'Photo hidden while staff check it': 'Foto disembunyikan semasa kakitangan menyemaknya', // native review
   'Photo held, 2 reports': 'Foto ditahan, 2 laporan', // native review
+  // A long post on the board: cut to three lines
+  'Read more': 'Baca lagi', // native review
+  'Show less': 'Ringkaskan', // native review
   'Two residents reported the post. Other residents cannot see its photo until you review it.':
     'Dua penduduk telah melaporkan siaran ini. Penduduk lain tidak dapat melihat fotonya sehingga anda menyemaknya.', // native review
   'Create a post with one optional photo (multipart form: the same fields as POST /posts, plus "photo")':
