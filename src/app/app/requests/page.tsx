@@ -13,6 +13,7 @@ import { useApi } from '@/lib/hooks';
 import { REPORT_CATEGORY_LABELS, type ReportCategory } from '@/shared/domain';
 import { CATEGORY_LABELS, RESIDENT_STATUS, type IncidentStatus } from '@/shared/incidents';
 import { PARCEL_STATE_LABELS, type ParcelState } from '@/shared/lockers';
+import { AksesPage } from '@/components/features/akses-mode';
 
 type ReportStep = 'RECEIVED' | 'CHECKED' | 'ASSIGNED' | 'FIXED' | 'CLOSED';
 type Item =
@@ -74,7 +75,7 @@ function lines(item: Item): { title: string; now: ReactNode; next: string | null
 export default function RequestsPage() {
   const requests = useApi<{ open: number; items: Item[] }>('/requests', { refreshInterval: 30_000 });
   return (
-    <>
+    <AksesPage>
       <PageHeader
         title="Request tracking"
         description="Everything your home is waiting on, in one place: reports, parcels and recycling collections. Each shows where it stands and what happens next."
@@ -120,6 +121,6 @@ export default function RequestsPage() {
           )
         }
       </Async>
-    </>
+    </AksesPage>
   );
 }

@@ -7,7 +7,8 @@ import { LocalizedInput } from '@/components/ui/localized-elements';
 import { ArrowRight, BellRing, Building, Camera, ChevronRight, ClipboardList, DoorOpen, House, KeyRound, Phone, ShieldCheck, Star, UserRound } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { AksesPage, GuidedFooter, GuidedStep, useAksesMode, useGuidedSteps } from '@/components/features/akses-mode';
 import { SERVICE_CATEGORY_PAGE, serviceCategoryHref } from '@/components/features/home-service-categories';
 import { BookingPhoto, BookingStatusBadge, BookingTimeline, PriceLine, Rating, REPORT_STATUS_LABELS, REPORT_STATUS_TONES, SERVICE_ICONS, SLOT_SHORT, Stars, type BookingEvent } from '@/components/features/home-services';
 import { ResidentHomeServiceWalkthrough } from '@/components/features/home-service-walkthroughs';
@@ -129,7 +130,7 @@ export function HomeServicesScreen({ initialBooking }: { initialBooking: string 
   };
 
   return (
-    <>
+    <AksesPage>
       <PageHeader title="SimeTown Home" description="Book a township service company. You see who is coming before they arrive, and you agree the price with them in person before any work starts." action={<ResidentHomeServiceWalkthrough />} />
       <div className="space-y-6">
         <SimulatedNote><Text>The companies, workers and reviews here are demo data. SimeTown takes no payment: you pay the company directly.</Text></SimulatedNote>
@@ -235,7 +236,7 @@ export function HomeServicesScreen({ initialBooking }: { initialBooking: string 
         }}
       />
       <BookingDetailModal id={openId} onClose={() => setOpenId(null)} onChanged={reload} />
-    </>
+    </AksesPage>
   );
 }
 
@@ -363,6 +364,10 @@ export function ProviderProfile({ merchantId, onClose }: { merchantId: string | 
 export function BookForm({ provider, onClose, onBooked }: { provider: Bookable | null; onClose: () => void; onBooked: (id: string) => void }) {
   const [photoName, setPhotoName] = useState<string | null>(null);
   const pickPhoto = usePhotoPick();
+  const t = useT();
+  // Simple Mode asks one question at a time (the problem, when, a photo). The fields and what is sent stay the same.
+  const { guided } = useAksesMode();
+  const [steps, stepsBox] = useGuidedSteps(3);
   const create = useAction(
     async (data: FormData) => {
       const photo = data.get('photo');
@@ -374,10 +379,20 @@ export function BookForm({ provider, onClose, onBooked }: { provider: Bookable |
       success: 'Request sent. The company will accept it or suggest another time.',
       onSuccess: (r) => {
         setPhotoName(null);
+        steps.reset();
         onBooked(r.id);
       },
     },
   );
+  const { showRejected } = steps;
+  // A rejected answer opens its question again.
+  useEffect(() => {
+    if (guided) showRejected();
+  }, [guided, create.fields, showRejected]);
+  const close = () => {
+    steps.reset();
+    onClose();
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -385,33 +400,44 @@ export function BookForm({ provider, onClose, onBooked }: { provider: Bookable |
     void create.run(data);
   };
   const f = create.fields;
+  const send = <Button type="submit" form="book-service" size={guided ? 'lg' : 'md'} pending={create.pending}><Text>Send request</Text></Button>;
+  const company = provider ? <>{provider.name} · <Text>{SERVICE_CATEGORY_LABELS[provider.category]}</Text></> : undefined;
   return (
     <Modal
       open={provider !== null}
-      onClose={onClose}
+      onClose={close}
+      wide={guided}
+      className={guided ? 'guided-modal' : undefined}
       title="Book a visit"
-      description={provider ? <>{provider.name} · <Text>{SERVICE_CATEGORY_LABELS[provider.category]}</Text></> : undefined}
-      footer={<><Button variant="secondary" onClick={onClose}><Text>Cancel</Text></Button><Button type="submit" form="book-service" pending={create.pending}><Text>Send request</Text></Button></>}
+      description={guided ? t('Question {step} of {total}', { step: steps.step + 1, total: steps.total }) : company}
+      footer={guided ? <GuidedFooter steps={steps} onClose={close} submit={send} /> : <><Button variant="secondary" onClick={close}><Text>Cancel</Text></Button>{send}</>}
     >
       {provider && (
-        <form id="book-service" method="post" onSubmit={submit} className="space-y-4" noValidate>
-          <div className="rounded-lg bg-brand-50 p-4 text-[15px] text-brand-900">
-            <p className="font-semibold"><Text>Before you book</Text></p>
-            <div className="mt-1"><PriceLine pricing={provider.pricing} calloutFeeSen={provider.callout_fee_sen} priceNote={provider.price_note} /></div>
-            <p className="mt-2 text-sm"><Text>The worker inspects the problem and agrees the price with you before starting. Only charges shown here or agreed with you may apply. SimeTown takes no payment.</Text></p>
+        <form id="book-service" method="post" onSubmit={submit} noValidate>
+          <div ref={stepsBox} className="space-y-4">
+            <GuidedStep steps={steps} index={0} guided={guided} className="space-y-4">
+              {guided && <p className="text-lg text-ink-600">{company}</p>}
+              <div className="rounded-lg bg-brand-50 p-4 text-[15px] text-brand-900">
+                <p className="font-semibold"><Text>Before you book</Text></p>
+                <div className="mt-1"><PriceLine pricing={provider.pricing} calloutFeeSen={provider.callout_fee_sen} priceNote={provider.price_note} /></div>
+                <p className="mt-2 text-sm"><Text>The worker inspects the problem and agrees the price with you before starting. Only charges shown here or agreed with you may apply. SimeTown takes no payment.</Text></p>
+              </div>
+              <Textarea label="What is the problem?" name="problem" maxLength={1000} placeholder="e.g. The pipe under the kitchen sink is leaking" required error={f.problem} />
+            </GuidedStep>
+            <GuidedStep steps={steps} index={1} guided={guided} className="grid gap-3 sm:grid-cols-2">
+              <Input label="Preferred date" name="preferredDate" type="date" min={today()} defaultValue={today()} required error={f.preferredDate} />
+              <Select label="Preferred time" name="preferredSlot" defaultValue="MORNING" error={f.preferredSlot}>
+                {SERVICE_SLOTS.map((s) => <option key={s} value={s}><Text>{SERVICE_SLOT_LABELS[s]}</Text></option>)}
+              </Select>
+            </GuidedStep>
+            <GuidedStep steps={steps} index={2} guided={guided} className="space-y-4">
+              <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-md border border-dashed border-ink-300 px-4 py-3 text-[15px] text-ink-700 transition-colors duration-200 hover:border-brand-500 hover:bg-brand-50/40 focus-within:border-brand-500">
+                <Camera className="size-5 shrink-0 text-ink-500" aria-hidden /><span className="min-w-0 flex-1"><span className="block truncate"><Text>{photoName ?? 'Add a photo of the problem (optional)'}</Text></span><span className="block text-xs text-ink-500"><Text>{PHOTO_HINT}</Text></span></span>
+                <LocalizedInput type="file" name="photo" accept={PHOTO_ACCEPT} capture="environment" className="sr-only" onChange={(event) => setPhotoName(pickPhoto(event.target)?.name ?? null)} />
+              </label>
+              <p className="text-sm text-ink-500"><Text>The company sees your first name and the problem. Your address and phone number are shared only once it accepts.</Text></p>
+            </GuidedStep>
           </div>
-          <Textarea label="What is the problem?" name="problem" maxLength={1000} placeholder="e.g. The pipe under the kitchen sink is leaking" required error={f.problem} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Preferred date" name="preferredDate" type="date" min={today()} defaultValue={today()} required error={f.preferredDate} />
-            <Select label="Preferred time" name="preferredSlot" defaultValue="MORNING" error={f.preferredSlot}>
-              {SERVICE_SLOTS.map((s) => <option key={s} value={s}><Text>{SERVICE_SLOT_LABELS[s]}</Text></option>)}
-            </Select>
-          </div>
-          <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-md border border-dashed border-ink-300 px-4 py-3 text-[15px] text-ink-700 transition-colors duration-200 hover:border-brand-500 hover:bg-brand-50/40 focus-within:border-brand-500">
-            <Camera className="size-5 shrink-0 text-ink-500" aria-hidden /><span className="min-w-0 flex-1"><span className="block truncate"><Text>{photoName ?? 'Add a photo of the problem (optional)'}</Text></span><span className="block text-xs text-ink-500"><Text>{PHOTO_HINT}</Text></span></span>
-            <LocalizedInput type="file" name="photo" accept={PHOTO_ACCEPT} capture="environment" className="sr-only" onChange={(event) => setPhotoName(pickPhoto(event.target)?.name ?? null)} />
-          </label>
-          <p className="text-sm text-ink-500"><Text>The company sees your first name and the problem. Your address and phone number are shared only once it accepts.</Text></p>
         </form>
       )}
     </Modal>

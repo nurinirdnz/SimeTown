@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { BackLink } from '@/components/ui/back-link';
 import { useRouter } from 'next/navigation';
 import { useState, type CSSProperties } from 'react';
+import { AksesPage } from '@/components/features/akses-mode';
 import { SERVICE_CATEGORY_PAGE } from '@/components/features/home-service-categories';
 import { PriceLine, Rating, SERVICE_ICONS, Stars } from '@/components/features/home-services';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ export function ServiceCategoryScreen({ category }: { category: ServiceCategory 
   const count = providers.data?.length;
 
   return (
-    <div className="space-y-6">
+    <AksesPage className="space-y-6">
       <BackLink href="/app/home-services"><Text>Back to SimeTown Home</Text></BackLink>
 
       {/* Hero: the category photo under a SimeTown brown wash, with what the category covers. */}
@@ -91,7 +92,7 @@ export function ServiceCategoryScreen({ category }: { category: ServiceCategory 
           router.push(`/app/home-services?booking=${id}`);
         }}
       />
-    </div>
+    </AksesPage>
   );
 }
 

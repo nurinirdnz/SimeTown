@@ -21,6 +21,7 @@ import { formatDateTime, timeAgo } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { useApi } from '@/lib/hooks';
 import { useT } from '@/lib/i18n';
+import { AksesPage } from '@/components/features/akses-mode';
 
 interface Parcel {
   id: string;
@@ -211,7 +212,7 @@ function ParcelsScreen() {
   };
 
   return (
-    <>
+    <AksesPage>
       <PageHeader
         title="Parcels"
         description="Parcels for your home: in your own smart locker door, or kept at the guardhouse. Each has a one-time code that works only for that parcel. Someone collecting for you? Share the code with them."
@@ -338,6 +339,6 @@ function ParcelsScreen() {
         onFiled={() => void parcels.mutate()}
       />
       <ReportProblemDialog open={missing} onClose={() => setMissing(false)} context="NOT_ARRIVED" subtitle="Tell us the tracking number. If it is already here, we will tell you where." />
-    </>
+    </AksesPage>
   );
 }

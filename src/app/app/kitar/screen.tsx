@@ -2,14 +2,14 @@
 
 import { Text } from '@/components/ui/localized-text';
 
-import { ArrowRight, Cpu, FlaskConical, Plus, QrCode as QrIcon, Recycle, Scale, Ticket, UserRound, Users } from 'lucide-react';
+import { Cpu, FlaskConical, Plus, QrCode as QrIcon, Recycle, Scale, Ticket, UserRound, Users } from 'lucide-react';
 import { Collections } from '@/components/features/collections';
 import { LiveMachineSession } from '@/components/features/machine-session';
 import { RecyclingGuide } from '@/components/features/recycling-guide';
 import { AksesPage, AksesWizard, useAksesMode } from '@/components/features/akses-mode';
 import { ResidentKitarWalkthrough } from '@/components/features/kitar-walkthroughs';
 import { HubSummary } from '@/components/features/kitar/hub-summary';
-import { GOOD_TO_KNOW_ID, HOW_KITAR_WORKS, KitarAbout } from '@/components/features/kitar/kitar-about';
+import { KitarAbout } from '@/components/features/kitar/kitar-about';
 import { KitarMap } from '@/components/features/kitar/kitar-map';
 import { PointsPausedBanner } from '@/components/features/kitar/limits-card';
 import { ManualRecycleDialog } from '@/components/features/kitar/manual-recycle-dialog';
@@ -49,8 +49,6 @@ export function KitarScreen() {
   // Only the hub shows points and level; Simple mode keeps its own layout and does not load them.
   const wallet = useApi<WalletSummary>(akses.simple ? null : '/wallet');
   const [tab, setTab] = useState<HubTab>('tx');
-  // The Good to know tile the About tab opens with, set only by the "New here?" link.
-  const [aboutTile, setAboutTile] = useState<string | null>(null);
   const [recycleOpen, setRecycleOpen] = useState(false);
   // The kiosk "Recycle here" on the Map tab starts the sheet on; null lets the resident choose.
   const [recycleSite, setRecycleSite] = useState<string | null>(null);
@@ -71,16 +69,6 @@ export function KitarScreen() {
     },
     success: (r) => `Claimed ${formatKg(r.grams)}. ${rewardMessage(r.reward, 'Thank you for recycling.')} Guest recycling earns XP only.`,
   });
-  // "New here? See how it works": open the About tab at Good to know, with the How Kitar works tile open.
-  const showHowItWorks = () => {
-    setAboutTile(HOW_KITAR_WORKS);
-    setTab('about');
-    requestAnimationFrame(() => {
-      const section = document.getElementById(GOOD_TO_KNOW_ID);
-      section?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      section?.focus({ preventScroll: true });
-    });
-  };
   const recycling = campaigns.data?.filter((c) => c.activity === 'KITAR_DROPOFF') ?? [];
 
   // --- The page's existing blocks, unchanged. Simple mode shows them in their original order; the hub's Transaction tab places them among the new parts.
@@ -113,7 +101,7 @@ export function KitarScreen() {
   const machineCard = (
     <Card>
       <CardHeader title="Kiosk bins with a scale" description="A 30-second stop: the bin’s scale sends the weight by itself, so there is nothing to type. Drop-offs weighed by a bin can also earn offer-backed points." />
-      <div className="grid gap-5 p-5 lg:grid-cols-[1fr_1.2fr]">
+      <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <Async state={overview} skeleton={<SkeletonStats count={1} />}>
           {(o) =>
             o.machines.length === 0 ? (
@@ -222,7 +210,7 @@ export function KitarScreen() {
         </div>
       ) : (
         <>
-          <Tabs items={HUB_TABS} value={tab} onChange={(next) => { setAboutTile(null); setTab(next); }} label="Kitar hub" />
+          <Tabs items={HUB_TABS} value={tab} onChange={setTab} label="Kitar hub" />
           {tab === 'tx' && (
             <TabPanel>
               <div className="space-y-6">
@@ -243,8 +231,6 @@ export function KitarScreen() {
                 {overview.data && <RatesList overview={overview.data} />}
                 {guideBlock}
                 {collectionsBlock}
-                <button type="button" onClick={showHowItWorks} className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-md text-[15px] font-semibold text-brand-700 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900">
-                  <Text>New here? See how it works</Text><ArrowRight className="size-4" aria-hidden /></button>
                 {recentCard}
               </div>
             </TabPanel>
@@ -256,7 +242,7 @@ export function KitarScreen() {
           )}
           {tab === 'about' && (
             <TabPanel>
-              <KitarAbout overview={overview.data} openTile={aboutTile} />
+              <KitarAbout overview={overview.data} />
             </TabPanel>
           )}
           <Modal

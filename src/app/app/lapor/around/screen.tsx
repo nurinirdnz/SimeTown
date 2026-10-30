@@ -23,6 +23,7 @@ import { useAction, usePaged } from '@/lib/hooks';
 import { useLang, useT } from '@/lib/i18n';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { REPORT_CATEGORIES, REPORT_CATEGORY_LABELS, type ReportCategory } from '@/shared/domain';
+import { AksesPage } from '@/components/features/akses-mode';
 
 /** A problem neighbours can see: enough residents have reported it or said "Me too". */
 type AroundReport = Issue;
@@ -104,7 +105,7 @@ function Around() {
   const typeOptions: { key: Category; label: string; count?: number }[] = [{ key: 'ALL', label: 'All types' }, ...REPORT_CATEGORIES.map((c) => ({ key: c, label: REPORT_CATEGORY_LABELS[c], count: data?.categories[c] ?? 0 }))];
 
   return (
-    <>
+    <AksesPage>
       <BackLink href="/app/lapor" className="mb-3"><Text>Back to my reports</Text></BackLink>
       <PageHeader title="Around the township" description="Problems neighbours have reported, by type. If one affects you too, tap Me too: you hear every update, and the township office sees how many people it affects." />
       {data && (
@@ -239,7 +240,7 @@ function Around() {
         </div>
       </div>
       <span className="sr-only" aria-live="polite">{list.stale ? t('Loading') : ''}</span>
-    </>
+    </AksesPage>
   );
 }
 

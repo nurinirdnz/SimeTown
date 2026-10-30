@@ -1,10 +1,11 @@
 'use client';
 
 import { Text } from '@/components/ui/localized-text';
+import { GuidedFooter, GuidedStep, useAksesMode, useGuidedSteps } from '@/components/features/akses-mode';
 import { ScheduleText } from '@/components/features/collector-schedule';
 
 import { Scale, Truck } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardHeader } from '@/components/ui/card';
 import { Modal } from '@/components/ui/dialog';
@@ -14,6 +15,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatKg } from '@/lib/format';
 import { useAction, useApi } from '@/lib/hooks';
+import { useT } from '@/lib/i18n';
 import { BOOK_AHEAD_DAYS, openSlots } from '@/shared/collector-schedule';
 import { MATERIALS, MATERIAL_INFO, type Material } from '@/shared/domain';
 
@@ -100,6 +102,19 @@ export function Collections({ request }: { request: { material: Material; n: num
     setSlot(first?.slot ?? 'MORNING');
   };
   const [weighing, setWeighing] = useState<Collection | null>(null);
+  // Simple Mode asks one question at a time: what, who, when, then what to collect. The same booking is sent.
+  const t = useT();
+  const { guided } = useAksesMode();
+  const [steps, stepsBox] = useGuidedSteps(4, (index) => {
+    if (index === 0 && materials.length === 0) return t('Please choose at least one item.');
+    if (index === 1 && !collectorId) return t('Please choose a collector.');
+    if (index === 2 && slots?.length === 0) return t('This collector has no days free in the next 30 days.');
+    return null;
+  });
+  const closeBook = () => {
+    setOpen(false);
+    steps.reset();
+  };
   // A tap on "Book a collection" in the guide opens the form with that material chosen.
   const [seen, setSeen] = useState(0);
   if (request && request.n !== seen) {
@@ -107,12 +122,13 @@ export function Collections({ request }: { request: { material: Material; n: num
     setMaterials([request.material]);
     setCollectorId('');
     setOpen(true);
+    steps.reset();
   }
   const fitting = (collectors.data ?? []).filter((c) => materials.every((m) => c.materials.includes(m)));
   const book = useAction((body: Record<string, unknown>) => api.post('/kitar/collections', body), {
     success: 'Booked. The gate has the collector’s pass.',
     onSuccess: () => {
-      setOpen(false);
+      closeBook();
       setMaterials([]);
       setCollectorId('');
       void mine.mutate();
@@ -154,6 +170,12 @@ export function Collections({ request }: { request: { material: Material; n: num
       slot,
     });
   };
+  const requestButton = <Button size={guided ? 'lg' : 'md'} type="submit" form="book-collection" pending={book.pending} disabled={materials.length === 0 || !collectorId || slots?.length === 0}><Text>Request collection</Text></Button>;
+  const { showRejected } = steps;
+  // A rejected answer opens its question again.
+  useEffect(() => {
+    if (guided) showRejected();
+  }, [guided, book.fields, showRejected]);
   const toggle = (m: Material) => {
     setMaterials((current) => (current.includes(m) ? current.filter((x) => x !== m) : [...current, m]));
     setCollectorId('');
@@ -226,9 +248,11 @@ export function Collections({ request }: { request: { material: Material; n: num
       <Modal
         open={weighing !== null}
         onClose={() => setWeighing(null)}
+        wide={guided}
+        className={guided ? 'guided-modal' : undefined}
         title="How much did they take?"
         description={weighing?.gate_scanned || weighing?.collector_at_gate ? 'Use the weight the collector told you.' : 'The gate has no record of the collector on this pass. If they were scanned in that day for any home, it counts. If not, there is no reward.'}
-        footer={<><Button variant="secondary" onClick={() => setWeighing(null)}><Text>Cancel</Text></Button><Button type="submit" form="collection-weight" pending={sendWeight.pending}><Text>Send</Text></Button></>}
+        footer={<><Button size={guided ? 'lg' : 'md'} variant="secondary" onClick={() => setWeighing(null)}><Text>Cancel</Text></Button><Button size={guided ? 'lg' : 'md'} type="submit" form="collection-weight" pending={sendWeight.pending}><Text>Send</Text></Button></>}
       >
         <form method="post" id="collection-weight" onSubmit={submitWeight}>
           <Input label="Weight (kg)" name="kg" type="number" min={0.1} max={500} step={0.1} required error={sendWeight.fields.weightG} hint="A very large weight counts up to a maximum for the material. Your Impact XP is the same." />
@@ -237,62 +261,74 @@ export function Collections({ request }: { request: { material: Material; n: num
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeBook}
+        wide={guided}
+        className={guided ? 'guided-modal' : undefined}
         title="Book a collection"
-        description="Choose what you have, then a collector who takes it and a day they come."
-        footer={<><Button variant="secondary" onClick={() => setOpen(false)}><Text>Cancel</Text></Button><Button type="submit" form="book-collection" pending={book.pending} disabled={materials.length === 0 || !collectorId || slots?.length === 0}><Text>Request collection</Text></Button></>}
+        description={guided ? t('Question {step} of {total}', { step: steps.step + 1, total: steps.total }) : 'Choose what you have, then a collector who takes it and a day they come.'}
+        footer={guided ? <GuidedFooter steps={steps} onClose={closeBook} submit={requestButton} /> : <><Button variant="secondary" onClick={closeBook}><Text>Cancel</Text></Button>{requestButton}</>}
       >
-        <form method="post" id="book-collection" onSubmit={submit} className="space-y-4" noValidate>
-          <fieldset>
-            <legend className="mb-2 text-sm font-semibold text-ink-900"><Text>What is it?</Text></legend>
-            <div className="flex flex-wrap gap-2">
-              {MATERIALS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={materials.includes(m)}
-                  onClick={() => toggle(m)}
-                  className={cn('rounded-full border px-3 py-1.5 text-sm font-medium transition-colors', materials.includes(m) ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300')}
-                >
-                  <Text>{MATERIAL_INFO[m].label}</Text>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <Select
-            label="Collector" value={collectorId} onChange={(event) => chooseCollector(event.target.value)} error={book.fields.collectorId}
-            hint={collectors.data && collectors.data.length === 0
-              ? 'No partner collectors yet'
-              : materials.length > 0 && fitting.length === 0 ? 'No collector takes all of these together. Book them separately.' : undefined}
-          >
-            <option value=""><Text>Choose…</Text></option>
-            {fitting.map((c) => <option key={c.id} value={c.id}>{c.name} · <ScheduleText stored={c.days} /></option>)}
-          </Select>
-          {!chosen ? (
-            <Select label="When" name="when" value="" disabled hint="Choose a collector first.">
-              <option value=""><Text>Choose…</Text></option>
-            </Select>
-          ) : slots ? (
-            <Select
-              label="When" name="when" value={`${day} ${slot}`} error={book.fields.day}
-              onChange={(event) => { const [d, s] = event.target.value.split(' '); setDay(d!); setSlot(s as 'MORNING' | 'AFTERNOON'); }}
-              hint={slots.length === 0 ? 'This collector has no days free in the next 30 days.' : undefined}
-            >
-              {slots.map((o) => <option key={`${o.day} ${o.slot}`} value={`${o.day} ${o.slot}`}><Text>{dayLabel(o.day)}</Text> · <Text>{SLOTS[o.slot]}</Text></option>)}
-            </Select>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-ink-600"><Text>Their days are not set in SimeTown yet. Choose a day and time they come.</Text></p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input label="Day" name="day" type="date" min={tomorrow()} required error={book.fields.day} value={day} onChange={(event) => setDay(event.target.value)} />
-                <Select label="Time" name="slot" value={slot} onChange={(event) => setSlot(event.target.value as 'MORNING' | 'AFTERNOON')}>
-                  <option value="MORNING"><Text>Morning</Text></option>
-                  <option value="AFTERNOON"><Text>Afternoon</Text></option>
+        <form method="post" id="book-collection" onSubmit={submit} noValidate>
+          <div ref={stepsBox} className="space-y-4">
+            <GuidedStep steps={steps} index={0} guided={guided}>
+              <fieldset>
+                <legend className={guided ? 'mb-3 text-3xl font-semibold text-ink-900' : 'mb-2 text-sm font-semibold text-ink-900'}><Text>What is it?</Text></legend>
+                <div className="flex flex-wrap gap-2">
+                  {MATERIALS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={materials.includes(m)}
+                      onClick={() => toggle(m)}
+                      className={cn('rounded-full border font-medium transition-colors', guided ? 'min-h-12 px-5 text-lg' : 'px-3 py-1.5 text-sm', materials.includes(m) ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-200 bg-white text-ink-700 hover:border-ink-300')}
+                    >
+                      <Text>{MATERIAL_INFO[m].label}</Text>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </GuidedStep>
+            <GuidedStep steps={steps} index={1} guided={guided}>
+              <Select
+                label="Collector" value={collectorId} onChange={(event) => chooseCollector(event.target.value)} error={book.fields.collectorId}
+                hint={collectors.data && collectors.data.length === 0
+                  ? 'No partner collectors yet'
+                  : materials.length > 0 && fitting.length === 0 ? 'No collector takes all of these together. Book them separately.' : undefined}
+              >
+                <option value=""><Text>Choose…</Text></option>
+                {fitting.map((c) => <option key={c.id} value={c.id}>{c.name} · <ScheduleText stored={c.days} /></option>)}
+              </Select>
+            </GuidedStep>
+            <GuidedStep steps={steps} index={2} guided={guided}>
+              {!chosen ? (
+                <Select label="When" name="when" value="" disabled hint="Choose a collector first.">
+                  <option value=""><Text>Choose…</Text></option>
                 </Select>
-              </div>
-            </div>
-          )}
-          <Textarea label="What should they collect?" name="items" maxLength={300} placeholder="e.g. One old fridge, and two boxes of old cables" required error={book.fields.items} />
+              ) : slots ? (
+                <Select
+                  label="When" name="when" value={`${day} ${slot}`} error={book.fields.day}
+                  onChange={(event) => { const [d, s] = event.target.value.split(' '); setDay(d!); setSlot(s as 'MORNING' | 'AFTERNOON'); }}
+                  hint={slots.length === 0 ? 'This collector has no days free in the next 30 days.' : undefined}
+                >
+                  {slots.map((o) => <option key={`${o.day} ${o.slot}`} value={`${o.day} ${o.slot}`}><Text>{dayLabel(o.day)}</Text> · <Text>{SLOTS[o.slot]}</Text></option>)}
+                </Select>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-ink-600"><Text>Their days are not set in SimeTown yet. Choose a day and time they come.</Text></p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input label="Day" name="day" type="date" min={tomorrow()} required error={book.fields.day} value={day} onChange={(event) => setDay(event.target.value)} />
+                    <Select label="Time" name="slot" value={slot} onChange={(event) => setSlot(event.target.value as 'MORNING' | 'AFTERNOON')}>
+                      <option value="MORNING"><Text>Morning</Text></option>
+                      <option value="AFTERNOON"><Text>Afternoon</Text></option>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </GuidedStep>
+            <GuidedStep steps={steps} index={3} guided={guided}>
+              <Textarea label="What should they collect?" name="items" maxLength={300} placeholder="e.g. One old fridge, and two boxes of old cables" required error={book.fields.items} />
+            </GuidedStep>
+          </div>
         </form>
       </Modal>
     </Card>

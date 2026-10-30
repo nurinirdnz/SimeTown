@@ -6,6 +6,7 @@ import { LocalizedImg, LocalizedInput } from '@/components/ui/localized-elements
 import { CheckCircle2, Copy, ExternalLink, Flag, ImagePlus, Phone, ShieldQuestion, Truck, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { GuidedFooter, GuidedStep, useAksesMode, useGuidedSteps } from '@/components/features/akses-mode';
 import { Badge } from '@/components/ui/card';
 import { Modal } from '@/components/ui/dialog';
 import { Input, Select, Textarea } from '@/components/ui/field';
@@ -50,6 +51,7 @@ export function ReportProblemDialog({ open, onClose, context, subtitle, lockerPa
   stationId?: string;
   onFiled?: () => void;
 }) {
+  const t = useT();
   const reasons = REPORT_REASONS[context];
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
@@ -85,6 +87,20 @@ export function ReportProblemDialog({ open, onClose, context, subtitle, lockerPa
       if (r.route === 'TOWNSHIP' || r.route === 'COURIER') onFiled?.();
     },
   });
+  const needsTracking = context === 'NOT_ARRIVED' && reason !== 'NOT_SURE';
+  // Simple Mode asks one question at a time: what went wrong, the tracking number (missing parcels), a note, a photo.
+  // Each step checks what Continue would have needed, so nothing new is asked and the same report is sent.
+  const { guided } = useAksesMode();
+  const questions = ['reason', ...(context === 'NOT_ARRIVED' ? ['tracking'] : []), 'note', ...(withPhoto ? ['photo'] : [])];
+  const at = (question: string) => questions.indexOf(question);
+  const [steps, stepsBox] = useGuidedSteps(questions.length, (index) => {
+    const question = questions[index];
+    if (question === 'reason' && !reason) return t('Please choose what went wrong.');
+    if (question === 'tracking' && needsTracking && tracking.trim().length < 4) return t('Please answer this question.');
+    if (question === 'note' && chosen?.needsNote && note.trim().length < 5) return t('Please answer this question.');
+    return null;
+  });
+  const asking = guided && !outcome;
   const close = () => {
     setReason('');
     setNote('');
@@ -92,54 +108,76 @@ export function ReportProblemDialog({ open, onClose, context, subtitle, lockerPa
     setCompanyId('');
     setOutcome(null);
     choosePhoto(null);
+    steps.reset();
     onClose();
   };
-  const needsTracking = context === 'NOT_ARRIVED' && reason !== 'NOT_SURE';
   const ready = Boolean(reason) && (!chosen?.needsNote || note.trim().length >= 5) && (!needsTracking || tracking.trim().length >= 4);
 
-  const footer = !outcome || outcome.route === 'CHOOSE_COURIER'
-    ? <><Button variant="secondary" onClick={close}><Text>Cancel</Text></Button><Button onClick={() => void send.run(false)} pending={send.pending} disabled={!ready || (outcome?.route === 'CHOOSE_COURIER' && !companyId)}><Text>Continue</Text></Button></>
-    : outcome.route === 'CONFIRM'
-      ? <><Button variant="secondary" onClick={close}><Text>It was someone in my home</Text></Button><Button onClick={() => void send.run(true)} pending={send.pending}><Text>Please investigate</Text></Button></>
-      : <Button onClick={close}><Text>Done</Text></Button>;
+  const proceed = <Button size={guided ? 'lg' : 'md'} onClick={() => void send.run(false)} pending={send.pending} disabled={!ready || (outcome?.route === 'CHOOSE_COURIER' && !companyId)}><Text>Continue</Text></Button>;
+  const footer = asking
+    ? <GuidedFooter steps={steps} onClose={close} submit={proceed} />
+    : !outcome || outcome.route === 'CHOOSE_COURIER'
+      ? <><Button variant="secondary" onClick={close}><Text>Cancel</Text></Button>{proceed}</>
+      : outcome.route === 'CONFIRM'
+        ? <><Button variant="secondary" onClick={close}><Text>It was someone in my home</Text></Button><Button onClick={() => void send.run(true)} pending={send.pending}><Text>Please investigate</Text></Button></>
+        : <Button onClick={close}><Text>Done</Text></Button>;
 
   return (
-    <Modal open={open} onClose={close} title="Report a problem" description={subtitle} footer={footer}>
+    <Modal
+      open={open}
+      onClose={close}
+      wide={guided}
+      className={guided ? 'guided-modal' : undefined}
+      title="Report a problem"
+      description={asking ? t('Question {step} of {total}', { step: steps.step + 1, total: steps.total }) : subtitle}
+      footer={footer}
+    >
       {!outcome && (
-        <div className="space-y-4">
-          <fieldset className="space-y-2">
-            <legend className="mb-1 text-sm font-semibold text-ink-900"><Text>What went wrong?</Text></legend>
-            {reasons.map((r) => (
-              <label key={r.key} className={cn('flex cursor-pointer items-start gap-3 rounded-lg border p-3', reason === r.key ? 'border-brand-600 bg-brand-50' : 'border-ink-200 bg-white hover:border-ink-300')}>
-                <input type="radio" name="report-reason" value={r.key} checked={reason === r.key} onChange={() => setReason(r.key)} className="mt-1 accent-brand-700" />
-                <span>
-                  <span className="block text-[15px] font-semibold text-ink-900"><Text>{r.label}</Text></span>
-                  <span className="block text-sm text-ink-600"><Text>{r.hint}</Text></span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          {context === 'NOT_ARRIVED' && <Input label="Tracking number" value={tracking} onChange={(event) => setTracking(event.target.value.toUpperCase())} maxLength={60} hint="From the courier’s message or the shop’s order page." />}
-          <Textarea label={chosen?.needsNote ? 'What happened' : 'Anything to add (optional)'} value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} />
-          {withPhoto && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-ink-700"><Text>Screenshot or photo (optional)</Text></p>
-              {preview ? (
-                <div className="flex items-start gap-3">
-                  <LocalizedImg src={preview} alt="The screenshot or photo you chose" className="max-h-40 w-auto rounded-lg border border-ink-200 object-contain" />
-                  <Button size="sm" variant="ghost" onClick={() => choosePhoto(null)}><X className="size-4" aria-hidden /><Text>Remove</Text></Button>
-                </div>
-              ) : (
-                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-ink-300 bg-white p-3 text-sm text-ink-600 transition-colors hover:border-brand-400 hover:bg-brand-50/50 has-focus-visible:outline-2 has-focus-visible:outline-brand-600">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700"><ImagePlus className="size-4" aria-hidden /></span>
+        <div ref={stepsBox} className="space-y-4">
+          <GuidedStep steps={steps} index={at('reason')} guided={guided}>
+            {guided && subtitle && <p className="mb-4 text-lg text-ink-600"><Text>{subtitle}</Text></p>}
+            <fieldset className="space-y-2">
+              <legend className={guided ? 'mb-3 text-3xl font-semibold text-ink-900' : 'mb-1 text-sm font-semibold text-ink-900'}><Text>What went wrong?</Text></legend>
+              {reasons.map((r) => (
+                <label key={r.key} className={cn('flex cursor-pointer items-start gap-3 rounded-lg border', guided ? 'p-4' : 'p-3', reason === r.key ? 'border-brand-600 bg-brand-50' : 'border-ink-200 bg-white hover:border-ink-300')}>
+                  <input type="radio" name="report-reason" value={r.key} checked={reason === r.key} onChange={() => setReason(r.key)} className="mt-1 accent-brand-700" />
                   <span>
-                    <span className="block font-semibold text-ink-900"><Text>Add a screenshot or photo</Text></span>
-                    <Text>It helps the township office see the problem.</Text> <Text>{PHOTO_HINT}</Text>.
+                    <span className={cn('block font-semibold text-ink-900', guided ? 'text-xl' : 'text-[15px]')}><Text>{r.label}</Text></span>
+                    <span className={cn('block text-ink-600', guided ? 'text-base' : 'text-sm')}><Text>{r.hint}</Text></span>
                   </span>
-                  <LocalizedInput type="file" accept={PHOTO_ACCEPT} className="sr-only" onChange={(event) => choosePhoto(pickPhoto(event.target))} />
                 </label>
-              )}
-            </div>
+              ))}
+            </fieldset>
+          </GuidedStep>
+          {context === 'NOT_ARRIVED' && (
+            <GuidedStep steps={steps} index={at('tracking')} guided={guided}>
+              <Input label="Tracking number" value={tracking} onChange={(event) => setTracking(event.target.value.toUpperCase())} maxLength={60} hint="From the courier’s message or the shop’s order page." />
+            </GuidedStep>
+          )}
+          <GuidedStep steps={steps} index={at('note')} guided={guided}>
+            <Textarea label={chosen?.needsNote ? 'What happened' : 'Anything to add (optional)'} value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} />
+          </GuidedStep>
+          {withPhoto && (
+            <GuidedStep steps={steps} index={at('photo')} guided={guided}>
+              <div className="space-y-2">
+                <p className={guided ? 'text-3xl font-semibold text-ink-900' : 'text-sm font-medium text-ink-700'}><Text>Screenshot or photo (optional)</Text></p>
+                {preview ? (
+                  <div className="flex items-start gap-3">
+                    <LocalizedImg src={preview} alt="The screenshot or photo you chose" className="max-h-40 w-auto rounded-lg border border-ink-200 object-contain" />
+                    <Button size="sm" variant="ghost" onClick={() => choosePhoto(null)}><X className="size-4" aria-hidden /><Text>Remove</Text></Button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-ink-300 bg-white p-3 text-sm text-ink-600 transition-colors hover:border-brand-400 hover:bg-brand-50/50 has-focus-visible:outline-2 has-focus-visible:outline-brand-600">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700"><ImagePlus className="size-4" aria-hidden /></span>
+                    <span>
+                      <span className="block font-semibold text-ink-900"><Text>Add a screenshot or photo</Text></span>
+                      <Text>It helps the township office see the problem.</Text> <Text>{PHOTO_HINT}</Text>.
+                    </span>
+                    <LocalizedInput type="file" accept={PHOTO_ACCEPT} className="sr-only" onChange={(event) => choosePhoto(pickPhoto(event.target))} />
+                  </label>
+                )}
+              </div>
+            </GuidedStep>
           )}
         </div>
       )}

@@ -3,29 +3,24 @@
 import { Text } from '@/components/ui/localized-text';
 import { LocalizedDiv } from '@/components/ui/localized-elements';
 
-import { BookOpen, CircleHelp, Gauge, MapPin, PackageCheck, Store, type LucideIcon } from 'lucide-react';
+import { CircleHelp, Gauge, MapPin, PackageCheck, Store, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge, Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/dialog';
-import { HowItWorksSteps } from './how-it-works';
 import { LimitsContent } from './limits-card';
 import { KIOSK_HOURS, OPEN_SITES } from './sites';
 import type { KitarOverview } from './types';
 
-/** The Good to know section, which the Transaction tab's "New here?" link scrolls to. */
-export const GOOD_TO_KNOW_ID = 'kitar-good-to-know';
-
 interface Tile {
   title: string;
   icon: LucideIcon;
-  /** A short answer, or one of the two longer sections the tile shows instead. */
-  body: string | 'HOW_IT_WORKS' | 'LIMITS';
+  /** A short answer, or the longer limits section the tile shows instead. */
+  body: string | 'LIMITS';
 }
 
-/** "Good to know", as in the prototype. Spending follows the spec: points per kg on a Shop Offer, the 30% rule for other points (BR30, BR12). */
+/** "Good to know". How Kitar works is the walkthrough at the top of the page, so it has no tile here. Spending follows the spec: points per kg on a Shop Offer, the 30% rule for other points (BR30, BR12). */
 const TILES: Tile[] = [
-  { title: 'How Kitar works', icon: BookOpen, body: 'HOW_IT_WORKS' },
   {
     title: 'Accepted items',
     icon: PackageCheck,
@@ -43,9 +38,6 @@ const TILES: Tile[] = [
   },
   { title: 'Limits and rules', icon: Gauge, body: 'LIMITS' },
 ];
-
-/** The tile the Transaction tab's "New here?" link opens. */
-export const HOW_KITAR_WORKS = 'How Kitar works';
 
 const STEPS = [
   { title: 'Scan the code on the bin’s screen.', body: 'It changes every 30 seconds. Each bin takes one material, such as paper or aluminium.' },
@@ -86,9 +78,8 @@ function KioskIllustration() {
 }
 
 /** The About tab, as in the prototype: the open kiosks, how a bin works, and short answers to common questions. */
-/** `openTile` names a tile to open when the tab first shows, from the "New here?" link. The tab is rebuilt each time it is chosen. */
-export function KitarAbout({ overview, openTile }: { overview?: KitarOverview; openTile?: string | null }) {
-  const [tile, setTile] = useState<Tile | null>(() => TILES.find((t) => t.title === openTile) ?? null);
+export function KitarAbout({ overview }: { overview?: KitarOverview }) {
+  const [tile, setTile] = useState<Tile | null>(null);
   return (
     <div className="space-y-6">
       <KioskIllustration />
@@ -130,9 +121,9 @@ export function KitarAbout({ overview, openTile }: { overview?: KitarOverview; o
         </ol>
       </Card>
 
-      <section id={GOOD_TO_KNOW_ID} tabIndex={-1} className="scroll-mt-24 space-y-3 rounded-xl focus:outline-none">
+      <section className="space-y-3">
         <h2 className="text-lg font-semibold text-ink-900"><Text>Good to know</Text></h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {TILES.map((item) => (
             <button
               key={item.title}
@@ -151,9 +142,7 @@ export function KitarAbout({ overview, openTile }: { overview?: KitarOverview; o
       </section>
 
       <Modal open={tile !== null} onClose={() => setTile(null)} title={tile?.title ?? ''} footer={<Button onClick={() => setTile(null)}><Text>Got it</Text></Button>}>
-        {tile?.body === 'HOW_IT_WORKS' ? (
-          <HowItWorksSteps />
-        ) : tile?.body === 'LIMITS' ? (
+        {tile?.body === 'LIMITS' ? (
           <LimitsContent limits={overview?.limits} />
         ) : (
           <p className="text-[15px] leading-relaxed text-ink-700"><Text>{tile?.body}</Text></p>

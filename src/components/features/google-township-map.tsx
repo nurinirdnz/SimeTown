@@ -255,14 +255,15 @@ export function GoogleTownshipMap({
     };
   }, [apiKey, checkpoints, focusLoopId, gate, here, hits, loops, route, t, viewKey]);
 
+  // Separate keys: the built-in map gets a new box, so Google's own "Oops!" box (painted inside the old one) goes with it.
   if (failed) {
     return (
-      <div className="space-y-2">
+      <div key="fallback" className="space-y-2">
         {fallback}
         <p className="text-xs text-warning-700"><Text>Google Maps could not load. The built-in map is shown instead.</Text></p>
       </div>
     );
   }
 
-  return <div ref={element} role="img" aria-label={t('Google Map with township walking and cycling loops')} className={cn('aspect-[8/5] min-h-72 w-full overflow-hidden rounded-lg border border-ink-200 bg-ink-50', className)} />;
+  return <div key="google" ref={element} role="img" aria-label={t('Google Map with township walking and cycling loops')} className={cn('aspect-[8/5] min-h-72 w-full overflow-hidden rounded-lg border border-ink-200 bg-ink-50', className)} />;
 }

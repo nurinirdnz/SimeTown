@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
@@ -178,6 +178,73 @@ export function AksesReadAloud({ profile, text }: { profile?: AksesProfile; text
       <Volume2 className="size-5" aria-hidden />
       <Text>Read aloud</Text>
     </Button>
+  );
+}
+
+/**
+ * Simple Mode for a form that already exists: its questions are asked one at a time. Each question sits in a
+ * <GuidedStep>; every step stays mounted (only hidden), so the form's values, its submit and what it sends are
+ * exactly as before. Next checks the current question; after a failed send, the rejected question is shown.
+ */
+export function useGuidedSteps(total: number, check?: (step: number) => string | null) {
+  const t = useT();
+  const [step, setStep] = useState(0);
+  const [error, setError] = useState('');
+  // The element around the questions: the second value returned, given as a callback ref (ref={box}).
+  const [node, box] = useState<HTMLDivElement | null>(null);
+  const last = Math.max(total - 1, 0);
+  const current = Math.min(step, last);
+  const stepBox = (index: number) => node?.querySelector<HTMLElement>(`[data-guided-step="${index}"]`);
+  const next = () => {
+    const fields = [...(stepBox(current)?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea') ?? [])];
+    const invalid = fields.find((field) => !field.disabled && !field.checkValidity());
+    const problem = check?.(current) ?? (invalid ? t('Please answer this question.') : null);
+    if (problem) {
+      setError(problem);
+      invalid?.focus();
+      return;
+    }
+    setError('');
+    setStep(Math.min(current + 1, last));
+  };
+  const back = () => {
+    setError('');
+    setStep(Math.max(current - 1, 0));
+  };
+  const reset = () => {
+    setError('');
+    setStep(0);
+  };
+  /** Opens the first question the server rejected (its field is marked aria-invalid). */
+  const showRejected = useCallback(() => {
+    const rejected = node?.querySelector('[aria-invalid="true"]')?.closest<HTMLElement>('[data-guided-step]');
+    if (rejected) setStep(Number(rejected.dataset.guidedStep));
+  }, [node]);
+  const steps = { step: current, total, last: current === last, error, next, back, reset, showRejected };
+  return [steps, box] as const;
+}
+
+export type GuidedSteps = ReturnType<typeof useGuidedSteps>[0];
+
+/** One question of a guided form. Outside Simple Mode it renders as a plain wrapper, so the form looks as before. */
+export function GuidedStep({ steps, index, guided, className, children }: { steps: GuidedSteps; index: number; guided: boolean; className?: string; children: ReactNode }) {
+  return (
+    <div data-guided-step={index} hidden={guided && steps.step !== index} className={className}>
+      {children}
+      {guided && steps.step === index && steps.error && <p role="alert" className="mt-3 text-lg font-semibold text-accent-700">{steps.error}</p>}
+    </div>
+  );
+}
+
+/** Back, Cancel and Next for a guided form; on the last question, the form's own submit button. */
+export function GuidedFooter({ steps, onClose, submit }: { steps: GuidedSteps; onClose: () => void; submit: ReactNode }) {
+  return (
+    <>
+      {steps.step > 0 && <Button size="lg" variant="secondary" onClick={steps.back}><Text>Back</Text></Button>}
+      <Button size="lg" variant="secondary" onClick={onClose}><Text>Cancel</Text></Button>
+      {/* Different keys, so the submit button is a new element: reusing Next's would send the form on the click that reached the last question. */}
+      {steps.last ? <Fragment key="submit">{submit}</Fragment> : <Button key="next" size="lg" onClick={steps.next}><Text>Next</Text></Button>}
+    </>
   );
 }
 

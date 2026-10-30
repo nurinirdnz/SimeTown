@@ -240,6 +240,10 @@
   html[data-akses-view] :is(.btn, [role='tab']) {
     padding-block: 0.625rem;
   }
+  /* Simple Mode: fields easier to hit. Before the Accessible view rule, so its larger fields win when both are on. */
+  html[data-simple-mode] .control {
+    min-height: 3rem;
+  }
   /* Layered on purpose: the one-question-at-a-time dialogs (guided-modal) set their own, larger fields. */
   html[data-akses-view] .control {
     min-height: 3.5rem;
@@ -622,6 +626,21 @@ html[data-akses-view] .app-topbar button[aria-pressed] { white-space: nowrap; }
 @media (max-width: 359px) {
   html[data-akses-view] .app-topbar button[aria-pressed] > svg { display: none; }
 }
+/* Home's two-across action cards on phones: the icon sits above the name, so a long name such as "Notifications" fits. */
+@media (max-width: 639px) {
+  html[data-akses-view] .resident-actions > a { flex-direction: column; }
+}
+/*
+ * Simple Mode has large targets too (largeTargets in akses-mode.tsx), on every page and in every dialog, not only
+ * where a page asked for a large button: buttons and tabs at least 48px tall, fields and tick boxes easier to hit.
+ * The one-question dialogs (guided-modal, below) keep their own, larger sizes.
+ */
+html[data-simple-mode] :is(.btn, [role='tab']) { min-height: 3rem; }
+/* Either mode: with larger text, a long button label wraps onto a second line instead of running off a phone screen. */
+html:is([data-akses-view], [data-simple-mode]) :is(#main, dialog) .btn { max-width: 100%; white-space: normal; text-align: center; }
+html[data-simple-mode] input:is([type='checkbox'], [type='radio']) { width: 1.25rem; height: 1.25rem; }
+html[data-akses-view][data-simple-mode] input:is([type='checkbox'], [type='radio']) { width: 1.5rem; height: 1.5rem; }
+
 /* Wider pages on large screens, so the larger text keeps a comfortable layout. */
 html[data-akses-view] #main.akses-view { max-width: 96rem; }
 /* Icons in buttons grow with the label; tick boxes and radio buttons are easier to hit. */

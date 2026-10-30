@@ -84,6 +84,9 @@ function LocalTownshipMap({
   if (!project) {
     return <div className={cn('grid h-56 place-items-center rounded-lg bg-ink-50 text-sm text-ink-500', className)}><Text>The township map has not been drawn yet.</Text></div>;
   }
+  // A name near an edge goes on the dot's other side, so it is never cut off. Widths are estimated from the text length.
+  const fitsRight = (x: number, name: string, px: number) => x + 13 + name.length * px * 0.6 <= W - 6;
+  const fitsLeft = (x: number, name: string, px: number) => x - 14 - name.length * px * 0.6 >= 6;
   const line = (points: [number, number][]) => points.map(([lat, lng], i) => `${i ? 'L' : 'M'}${project(lat, lng).map((n) => n.toFixed(1)).join(' ')}`).join(' ');
   const lake = loops.find((l) => /lake|tasik/i.test(l.name));
   const lakeShape = lake && lake.path.length > 3
@@ -121,11 +124,12 @@ function LocalTownshipMap({
       {checkpoints.map((cp) => {
         const [x, y] = project(cp.lat, cp.lng);
         const hit = hits.includes(cp.id);
+        const right = fitsRight(x, cp.name, 12);
         return (
           <g key={cp.id} opacity={focusLoopId && cp.loop_id !== focusLoopId ? 0.3 : 1}>
             <circle cx={x} cy={y} r="9" fill={hit ? '#1a7f52' : 'white'} stroke={hit ? '#14643f' : '#0f5351'} strokeWidth="2.5" />
             {hit && <path d={`M${x - 4} ${y} l3 3 l5 -6`} fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
-            <text x={x + 13} y={y + 4} className="fill-ink-800 text-[12px] font-semibold" paintOrder="stroke" stroke="#eef5ee" strokeWidth="4">
+            <text x={right ? x + 13 : x - 13} y={y + 4} textAnchor={right ? 'start' : 'end'} className="fill-ink-800 text-[12px] font-semibold" paintOrder="stroke" stroke="#eef5ee" strokeWidth="4">
               {cp.name}
             </text>
           </g>
@@ -133,11 +137,12 @@ function LocalTownshipMap({
       })}
       {gate && (() => {
         const [x, y] = project(gate.lat, gate.lng);
+        const left = fitsLeft(x, gate.name ?? 'Main gate', 11);
         return (
           <g>
             <rect x={x - 9} y={y - 9} width="18" height="18" rx="4" fill="#083433" />
             <text x={x} y={y + 4} textAnchor="middle" className="fill-white text-[11px] font-bold"><Text>G</Text></text>
-            <text x={x - 14} y={y + 4} textAnchor="end" className="fill-ink-700 text-[11px] font-medium" paintOrder="stroke" stroke="#eef5ee" strokeWidth="4">
+            <text x={left ? x - 14 : x + 14} y={y + 4} textAnchor={left ? 'end' : 'start'} className="fill-ink-700 text-[11px] font-medium" paintOrder="stroke" stroke="#eef5ee" strokeWidth="4">
               <Text>{gate.name ?? 'Main gate'}</Text>
             </text>
           </g>

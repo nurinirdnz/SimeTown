@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, PageHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/feedback';
 import { api, ApiError } from '@/lib/api';
+import { AksesPage } from '@/components/features/akses-mode';
 
 /** Scanning the machine's screen lands here: the session starts at once, then follows live. */
 export function JoinMachine({ machineId, code }: { machineId: string | null; code: string | null }) {
@@ -25,7 +26,7 @@ export function JoinMachine({ machineId, code }: { machineId: string | null; cod
   }, [machineId, code]);
 
   return (
-    <>
+    <AksesPage>
       <PageHeader title="Kitar · recycle at a bin" description="The bin’s scale weighs your items and sends the weight by itself. Nothing to type." />
       {state.status === 'failed' ? (
         <EmptyState icon={Recycle} title="Could not start at the bin" action={<Button href="/app/kitar"><Text>Back to Kitar</Text></Button>}>
@@ -40,6 +41,6 @@ export function JoinMachine({ machineId, code }: { machineId: string | null; cod
           <LiveMachineSession />
         </div>
       )}
-    </>
+    </AksesPage>
   );
 }

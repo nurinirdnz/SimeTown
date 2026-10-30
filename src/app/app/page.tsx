@@ -269,7 +269,7 @@ export default function ResidentHome() {
                 <action.icon className="size-5" aria-hidden />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-semibold text-ink-900"><Text>{action.label}</Text></span>
+                <span className="block text-[15px] font-semibold text-ink-900 break-words hyphens-auto"><Text>{action.label}</Text></span>
                 <span className="block text-sm text-ink-500">{t(action.text)}</span>
               </span>
             </Link>

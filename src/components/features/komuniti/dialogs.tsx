@@ -14,6 +14,7 @@ import { useAction } from '@/lib/hooks';
 import { useT } from '@/lib/i18n';
 import { PHOTO_ACCEPT, PHOTO_HINT, shrinkPhoto, usePhotoPick } from '@/lib/image';
 import { POST_FLAG_CATEGORIES, POST_FLAG_CATEGORY_LABELS, type PostFlagCategory, type PostType } from '@/shared/domain';
+import { GuidedFooter, GuidedStep, useAksesMode, useGuidedSteps } from '@/components/features/akses-mode';
 import { KINDS, addDays, today, type Post, type PostKind, type Responder } from './model';
 
 /** "What would you like to post?" when the tab allows more than one kind. */
@@ -158,9 +159,9 @@ export function CreatePost({ kind, accessible, onClose, onCreated }: { kind: Pos
           {accessible && step > 0 && <Button size="lg" variant="secondary" onClick={() => setStep((current) => current - 1)}><Text>Back</Text></Button>}
           <Button size={accessible ? 'lg' : 'md'} variant="secondary" onClick={onClose}><Text>Cancel</Text></Button>
           {accessible && step < steps.length - 1 ? (
-            <Button size="lg" onClick={next}><Text>Next</Text></Button>
+            <Button key="next" size="lg" onClick={next}><Text>Next</Text></Button>
           ) : (
-            <Button size={accessible ? 'lg' : 'md'} type="submit" form="create-post" pending={create.pending}><Text>Post</Text></Button>
+            <Button key="post" size={accessible ? 'lg' : 'md'} type="submit" form="create-post" pending={create.pending}><Text>Post</Text></Button>
           )}
         </>
       }
@@ -198,47 +199,64 @@ export function CreatePost({ kind, accessible, onClose, onCreated }: { kind: Pos
   );
 }
 
-/** Reporting a post to township staff: why, and (optionally) a few words. */
+/** Reporting a post to township staff: why, and (optionally) a few words. Simple Mode asks the two one at a time. */
 export function ReportPost({ post, onClose, onReported }: { post: Post | null; onClose: () => void; onReported: () => void }) {
+  const t = useT();
+  const { guided } = useAksesMode();
+  const [steps, stepsBox] = useGuidedSteps(2);
   const [category, setCategory] = useState<PostFlagCategory>('SCAM');
+  const close = () => {
+    steps.reset();
+    onClose();
+  };
   const flag = useAction((reason: string) => api.post(`/posts/${post!.id}/flag`, { category, reason: reason || undefined }), {
     success: 'Thank you. Township staff will look at it.',
     onSuccess: () => {
       onReported();
-      onClose();
+      close();
     },
   });
+  const { showRejected } = steps;
+  // A rejected answer opens its question again.
+  useEffect(() => {
+    if (guided) showRejected();
+  }, [guided, flag.fields, showRejected]);
+  const description = 'Township staff see every report. Posts reported by several residents are hidden until staff have reviewed them. The person who posted it is not told who reported it.';
+  const report = <Button size={guided ? 'lg' : 'md'} variant="danger" type="submit" form="flag-post" pending={flag.pending}><Text>Report</Text></Button>;
   return (
     <Modal
       open={post !== null}
-      onClose={onClose}
+      onClose={close}
+      wide={guided}
+      className={guided ? 'guided-modal' : undefined}
       title="Report this post"
-      description="Township staff see every report. Posts reported by several residents are hidden until staff have reviewed them. The person who posted it is not told who reported it."
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}><Text>Cancel</Text></Button>
-          <Button variant="danger" type="submit" form="flag-post" pending={flag.pending}><Text>Report</Text></Button>
-        </>
-      }
+      description={guided ? t('Question {step} of {total}', { step: steps.step + 1, total: steps.total }) : description}
+      footer={guided ? <GuidedFooter steps={steps} onClose={close} submit={report} /> : <><Button variant="secondary" onClick={close}><Text>Cancel</Text></Button>{report}</>}
     >
       <form method="post"
         id="flag-post"
-        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           void flag.run(String(new FormData(event.currentTarget).get('reason') ?? '').trim());
         }}
       >
-        <Select label="What is wrong with it?" name="category" value={category} onChange={(event) => setCategory(event.target.value as PostFlagCategory)} error={flag.fields.category}>
-          {POST_FLAG_CATEGORIES.map((c) => <option key={c} value={c}><Text>{POST_FLAG_CATEGORY_LABELS[c]}</Text></option>)}
-        </Select>
-        <Textarea
-          label={category === 'OTHER' ? 'Tell us more' : 'Tell us more (optional)'}
-          name="reason"
-          maxLength={200}
-          required={category === 'OTHER'}
-          error={flag.fields.reason}
-        />
+        <div ref={stepsBox} className="space-y-4">
+          <GuidedStep steps={steps} index={0} guided={guided}>
+            {guided && <p className="mb-4 text-base text-ink-600"><Text>{description}</Text></p>}
+            <Select label="What is wrong with it?" name="category" value={category} onChange={(event) => setCategory(event.target.value as PostFlagCategory)} error={flag.fields.category}>
+              {POST_FLAG_CATEGORIES.map((c) => <option key={c} value={c}><Text>{POST_FLAG_CATEGORY_LABELS[c]}</Text></option>)}
+            </Select>
+          </GuidedStep>
+          <GuidedStep steps={steps} index={1} guided={guided}>
+            <Textarea
+              label={category === 'OTHER' ? 'Tell us more' : 'Tell us more (optional)'}
+              name="reason"
+              maxLength={200}
+              required={category === 'OTHER'}
+              error={flag.fields.reason}
+            />
+          </GuidedStep>
+        </div>
       </form>
     </Modal>
   );

@@ -4,8 +4,8 @@ import { Text } from '@/components/ui/localized-text';
 
 import { Download, LogOut, Mail, MapPin, ShieldAlert, Trash2 } from 'lucide-react';
 import { LocalizedLink as Link } from '@/components/ui/localized-elements';
-import { useState, type FormEvent } from 'react';
-import { AksesPage, AksesWizard, useAksesMode } from '@/components/features/akses-mode';
+import { useEffect, useState, type FormEvent } from 'react';
+import { AksesPage, AksesWizard, GuidedFooter, GuidedStep, useAksesMode, useGuidedSteps } from '@/components/features/akses-mode';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardHeader, PageHeader } from '@/components/ui/card';
 import { Modal } from '@/components/ui/dialog';
@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { useAction, useApi } from '@/lib/hooks';
+import { useT } from '@/lib/i18n';
 import type { Me } from '@/lib/types';
 import { formatPhone, ROLE_LABELS } from '@/shared/domain';
 import { reloadTo } from '@/lib/navigate';
@@ -60,14 +61,29 @@ function EmailCard({ me, onChanged }: { me: Me; onChanged: () => void }) {
 
 /** A resident's home address. Choosing a different home means it is confirmed again (BR1). */
 function HomeCard({ me, onChanged }: { me: Me; onChanged: () => void }) {
+  const t = useT();
+  const { guided } = useAksesMode();
+  // Simple Mode: the home first, then owner or tenant.
+  const [steps, stepsBox] = useGuidedSteps(2);
   const [changing, setChanging] = useState(false);
+  const close = () => {
+    setChanging(false);
+    steps.reset();
+  };
   const change = useAction((body: { homeId: string; occupancy: string }) => api.post('/me/home', body), {
     success: 'Address saved. The township office will confirm your home.',
     onSuccess: () => {
-      setChanging(false);
+      close();
       onChanged();
     },
   });
+  const { showRejected } = steps;
+  // A rejected answer opens its question again.
+  useEffect(() => {
+    if (guided) showRejected();
+  }, [guided, change.fields, showRejected]);
+  const description = 'If you choose a different home, your account is confirmed again before you can earn or spend.';
+  const save = <Button type="submit" form="change-home" size={guided ? 'lg' : 'md'} pending={change.pending}><Text>Save address</Text></Button>;
   const incomplete = me.missing.includes('address');
   return (
     <Card>
@@ -90,15 +106,12 @@ function HomeCard({ me, onChanged }: { me: Me; onChanged: () => void }) {
       </div>
       <Modal
         open={changing}
-        onClose={() => setChanging(false)}
+        onClose={close}
+        wide={guided}
+        className={guided ? 'guided-modal' : undefined}
         title="Your address"
-        description="If you choose a different home, your account is confirmed again before you can earn or spend."
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setChanging(false)}><Text>Cancel</Text></Button>
-            <Button type="submit" form="change-home" pending={change.pending}><Text>Save address</Text></Button>
-          </>
-        }
+        description={guided ? t('Question {step} of {total}', { step: steps.step + 1, total: steps.total }) : description}
+        footer={guided ? <GuidedFooter steps={steps} onClose={close} submit={save} /> : <><Button variant="secondary" onClick={close}><Text>Cancel</Text></Button>{save}</>}
       >
         <form
           id="change-home"
@@ -111,11 +124,18 @@ function HomeCard({ me, onChanged }: { me: Me; onChanged: () => void }) {
             void change.run({ homeId: form.homeId ?? '', occupancy: form.occupancy ?? 'OWNER' });
           }}
         >
-          <AddressPicker townshipId={me.townshipId} error={change.fields.homeId} />
-          <Select label="I am the" name="occupancy" defaultValue={me.occupancy ?? 'OWNER'} error={change.fields.occupancy}>
-            <option value="OWNER"><Text>Owner</Text></option>
-            <option value="TENANT"><Text>Tenant</Text></option>
-          </Select>
+          <div ref={stepsBox} className="space-y-4">
+            <GuidedStep steps={steps} index={0} guided={guided} className="space-y-4">
+              {guided && <p className="text-lg text-ink-600"><Text>{description}</Text></p>}
+              <AddressPicker townshipId={me.townshipId} error={change.fields.homeId} />
+            </GuidedStep>
+            <GuidedStep steps={steps} index={1} guided={guided}>
+              <Select label="I am the" name="occupancy" defaultValue={me.occupancy ?? 'OWNER'} error={change.fields.occupancy}>
+                <option value="OWNER"><Text>Owner</Text></option>
+                <option value="TENANT"><Text>Tenant</Text></option>
+              </Select>
+            </GuidedStep>
+          </div>
         </form>
       </Modal>
     </Card>
