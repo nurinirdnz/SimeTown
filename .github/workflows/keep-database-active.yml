@@ -1,0 +1,37 @@
+name: Keep database active
+
+# Free databases pause after a quiet spell, and the hosted site then cannot sign anyone in. Once a day this
+# calls /api/v1/ready, which wakes the site and runs a small database query, so the database sees regular use.
+# It does not keep the website awake: that still sleeps between visits on Render's free plan.
+# If the database does not answer, this run fails and GitHub emails you. Restore the database, then re-run it.
+# Set the repository variable APP_URL to check a different address.
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 11:17 in Malaysia, every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Call the readiness check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_URL: ${{ vars.APP_URL || 'https://simetown.onrender.com' }}
+    steps:
+      - name: Wait for the database to answer
+        run: |
+          # A sleeping site takes about a minute to start, and may answer with a loading page meanwhile,
+          # so only the real "ready" answer counts.
+          for _ in $(seq 1 30); do
+            if curl -sS -m 30 "${APP_URL%/}/api/v1/ready" | grep -q '"status":"ready"'; then
+              echo "Ready."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::${APP_URL%/}/api/v1/ready did not answer as ready within the time allowed"
+          exit 1
