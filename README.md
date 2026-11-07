@@ -10,13 +10,13 @@ couriers and the property developer, on one shared, audited rewards ledger.**
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791?logo=postgresql&logoColor=white)
 ![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss&logoColor=white)
-![Vitest](https://img.shields.io/badge/tests-~520_cases-6e9f18?logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/tests-~530_cases-6e9f18?logo=vitest&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-GHCR-2496ed?logo=docker&logoColor=white)
 ![EN / BM](https://img.shields.io/badge/i18n-English_%2F_Bahasa_Malaysia-b31942)
 
 Built for the **Sime Darby Property University Hackathon 2026** — *"Township of Tomorrow", People & Planet*.
 
-[Features by role](docs/FEATURES.md) · [Demo guide](docs/DEMO_TESTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [API](docs/API.md)
+[Live demo](https://simetown.onrender.com) · [Features by role](docs/FEATURES.md) · [Demo guide](docs/DEMO_TESTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [API](docs/API.md)
 
 </div>
 
@@ -66,6 +66,7 @@ errors to clean API errors, and generates [docs/API.md](docs/API.md) and `openap
 **Security built in, not bolted on.**
 - Salted scrypt passwords and SHA-256-hashed session tokens in `__Host-` cookies.
 - Role-based idle timeouts: 15 min for staff, 30 min for others, none for guards on shift, a 12 h cap for everyone.
+- An email alert whenever a password changes, with a link to reset it if the change was not the owner's.
 - A per-request CSP nonce with `strict-dynamic`, and a same-origin check on every write.
 - AES-256-GCM encryption for visitors' ID numbers, and HMAC-signed records from recycling machines and locker gateways.
 - OpenID Connect (PKCE, RS256) sign-in for courier companies.
@@ -145,7 +146,7 @@ Optional switches in `.env`:
 | Setting | What it turns on |
 | --- | --- |
 | `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL` | The hosted AI Assistant and photo and report classification |
-| `SMTP_*` | Real emails: welcome, password reset, parcel and visitor notices |
+| `SMTP_*` | Real emails: welcome, password reset, password changed, parcel and visitor notices. If your host blocks ports 465 and 587, as Render's free plan does, use a mail provider on port 2525 |
 | `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Redis rate limits and the session cache |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | A Google basemap for Gerak, instead of the built-in township map |
 | `FLOOD_MODEL_URL` | Your own CCTV water-level model |
@@ -276,8 +277,12 @@ To follow one feature end to end, open `src/server/modules/<feature>/routes.ts`,
   - SMS. Gerak route playback in test mode.
 - **Previews:** home warranty and defect records, resale and rental listings.
 - **Archived for now, with restore kits:** guided parking, Jimat energy bills and solar sites, and greener building materials ([docs/archive/](docs/archive/)).
+- **Hosted demo:** runs at [simetown.onrender.com](https://simetown.onrender.com), with Render for the app, Supabase for PostgreSQL and Brevo for email.
+  - On a free plan the site sleeps when idle, so the first visit can take about a minute.
+  - A daily GitHub Action calls the readiness check to help stop the database pausing.
+  - The repo includes no scheduler for the other background jobs, so parcel and visitor emails and reminders only go out where one is set up.
 - **Not yet done:**
-  - No penetration test, load test, real-phone testing or deployment to a public host.
+  - No penetration test, load test or real-phone testing.
   - The live AI call has not been exercised without a key (its fallbacks are tested).
   - Rates such as 1 point per RM1 are the proposal's assumptions.
   - See [SECURITY.md › Known limits](docs/SECURITY.md#known-limits).
