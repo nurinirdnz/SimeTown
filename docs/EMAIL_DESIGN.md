@@ -247,7 +247,7 @@ It is already built, in `src/server/modules/email/`. **Use it; do not call nodem
 | `layout.ts` | `renderEmail(content)`: the frame in section 6, filled in, escaped and translated, plus the plain-text part |
 | `outbox.ts` | `queueEmails(...)` writes an email to the outbox inside the event's transaction; `sendQueuedEmails` sends what is due (the `lockers` and `emails` jobs call it); `cleanupEmails` keeps the words 30 days and the record 180 days |
 | `parcels.ts` | The four parcel emails, as examples to copy |
-| `account.ts` | The welcome email (sent when a resident creates an account) and the password reset email (from *Forgot your password?* on the sign-in page). Both are always sent |
+| `account.ts` | The welcome email (sent when a resident creates an account), the password reset email (from *Forgot your password?* on the sign-in page) and the password changed alert (after a change from Account or a reset link). All are always sent |
 
 **Adding a new email (for example a password reset):**
 
@@ -297,6 +297,7 @@ How it behaves:
 | Door opened without a code | Security alert (red band) | Your locker door was opened without a code | Locker · Time · Parcels inside | View locker activity |
 | Welcome (new resident) | Account created (success) | Your SimeTown account is ready | Account email · Township · Created · Your home (waiting for confirmation) | Open SimeTown |
 | Password reset | Account | Reset your SimeTown password | Account email · Requested · Expires in 30 minutes | Reset my password |
+| Password changed | Security alert (red band) | Your SimeTown password was changed | Account email · Changed | Reset my password |
 
 For a password reset: the link carries a single-use, short-lived token; say "If you did not ask for
 this, you can ignore this email. Your password stays the same." in the note box; never include the

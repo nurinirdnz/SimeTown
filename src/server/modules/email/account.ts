@@ -11,6 +11,7 @@ import { when } from './parcels';
 
 const RESET_FOOTER = 'You received this because a password reset was asked for with this email address. Account emails are always sent.';
 const WELCOME_FOOTER = 'You received this because a SimeTown account was created with this email address. Account emails are always sent.';
+const CHANGED_FOOTER = 'You received this because the password on this SimeTown account was changed. Account emails are always sent.';
 
 /** A resident has just created their account. */
 export function emailWelcome(q: Queryable, userId: string, p: { email: string; township: string; at: Date }) {
@@ -51,4 +52,29 @@ export function emailPasswordReset(q: Queryable, userId: string, p: { id: string
     note: 'If you did not ask for this, you can ignore this email. Your password stays the same.',
     footer: RESET_FOOTER,
   }), `email-password-reset:${p.id}`, { always: true }, p.at);
+}
+
+/**
+ * This account's password has just been changed, from Account or from a reset link. It tells the real owner if
+ * someone else did it, so the button starts a new reset, which only the owner of this inbox can finish. It shares
+ * the PASSWORD_RESET kind, so it needs no database change: nothing reads the kind, and a kind the database did not
+ * know yet would make the password change itself fail.
+ */
+export function emailPasswordChanged(q: Queryable, userId: string, p: { email: string; at: Date }) {
+  return queueEmails(q, [userId], 'PASSWORD_RESET', (lang) => ({
+    subject: 'Your SimeTown password was changed',
+    preheader: 'If this was not you, reset your password now.',
+    band: 'alert',
+    bandLabel: 'Security alert',
+    status: { tone: 'alert', label: 'Security alert' },
+    heading: 'Your SimeTown password was changed',
+    intro: 'the password for your SimeTown account was just changed, and every other device was signed out.',
+    facts: [
+      { label: 'Account email', value: p.email },
+      { label: 'Changed', value: when(p.at, lang) },
+    ],
+    action: { label: 'Reset my password', url: appLink('/forgot-password') },
+    note: 'If this was you, no action is needed. If it was not, reset your password now and contact the township office straight away.',
+    footer: CHANGED_FOOTER,
+  }), `email-password-changed:${userId}:${p.at.getTime()}`, { always: true }, p.at);
 }

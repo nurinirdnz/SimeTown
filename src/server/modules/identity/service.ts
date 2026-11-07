@@ -8,7 +8,7 @@ import { ACTOR_COLUMNS, COURIER_SESSION_HOURS, createSession, hashToken, newToke
 import { conflict, forbidden, notFound, ruleViolation, unauthorized } from '../../errors';
 import { decodeCursor, toPage, type PageQuery } from '../../http/pagination';
 import { audit } from '../audit';
-import { emailPasswordReset, emailWelcome } from '../email/account';
+import { emailPasswordChanged, emailPasswordReset, emailWelcome } from '../email/account';
 import { sendSoon } from '../email/outbox';
 import { createAccount } from '../ledger/ledger';
 import { expireLotsForUser } from '../ledger/points';
@@ -95,13 +95,16 @@ export async function changePassword(db: Db, actor: Actor, input: { current: str
     throw ruleViolation('WRONG_PASSWORD', 'Your current password is not correct.');
   }
   const passwordHash = await hashPassword(input.next);
-  return db.tx(async (tx) => {
+  const token = await db.tx(async (tx) => {
     await tx.query('UPDATE users SET password_hash = $2, updated_at = $3 WHERE id = $1', [actor.id, passwordHash, now]);
     await tx.query('DELETE FROM sessions WHERE user_id = $1', [actor.id]); // signs out every device
     await sessionsChanged(tx);
+    await emailPasswordChanged(tx, actor.id, { email: actor.email, at: now });
     await audit(tx, actor.id, 'PASSWORD_CHANGED', 'user', actor.id);
     return createSession(tx, actor.id, now);
   });
+  sendSoon(db);
+  return token;
 }
 
 // --- Forgotten password: a single-use link by email ---------------------------
@@ -147,7 +150,7 @@ export async function requestPasswordReset(db: Db, email: string, now: Date): Pr
 /** Sets a new password from the emailed link, signs out every device, and signs in here. */
 export async function resetPassword(db: Db, input: { token: string; password: string }, now: Date): Promise<{ token: string; actor: Actor }> {
   const passwordHash = await hashPassword(input.password);
-  return db.tx(async (tx) => {
+  const signedIn = await db.tx(async (tx) => {
     const reset = await one<{ user_id: string }>(
       tx,
       'SELECT user_id FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2 FOR UPDATE',
@@ -166,9 +169,12 @@ export async function resetPassword(db: Db, input: { token: string; password: st
       title: 'Your password was changed',
       body: 'If you did not do this, contact the township office straight away.',
     });
+    await emailPasswordChanged(tx, row.id, { email: row.email, at: now });
     await audit(tx, row.id, 'PASSWORD_RESET', 'user', row.id);
     return { token: await createSession(tx, row.id, now, row.role === 'COURIER' ? COURIER_SESSION_HOURS : undefined), actor: toActor(row) };
   });
+  sendSoon(db);
+  return signedIn;
 }
 
 export async function updateProfile(db: Db, actor: Actor, input: { fullName: string; phone: string }, now: Date) {

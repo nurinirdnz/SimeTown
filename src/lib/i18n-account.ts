@@ -36,6 +36,17 @@ export const accountMalay: Record<string, string> = {
   'You received this because a password reset was asked for with this email address. Account emails are always sent.':
     'Anda menerima e-mel ini kerana permintaan menetapkan semula kata laluan dibuat dengan alamat e-mel ini. E-mel akaun sentiasa dihantar.',
 
+  // Password changed email
+  'Your SimeTown password was changed': 'Kata laluan SimeTown anda telah ditukar',
+  'If this was not you, reset your password now.': 'Jika ini bukan anda, tetapkan semula kata laluan anda sekarang.',
+  'the password for your SimeTown account was just changed, and every other device was signed out.':
+    'kata laluan akaun SimeTown anda baru sahaja ditukar, dan semua peranti lain telah dilog keluar.',
+  'Changed': 'Ditukar',
+  'If this was you, no action is needed. If it was not, reset your password now and contact the township office straight away.':
+    'Jika ini anda, tiada tindakan diperlukan. Jika bukan, tetapkan semula kata laluan anda sekarang dan hubungi pejabat perbandaran dengan segera.',
+  'You received this because the password on this SimeTown account was changed. Account emails are always sent.':
+    'Anda menerima e-mel ini kerana kata laluan akaun SimeTown ini telah ditukar. E-mel akaun sentiasa dihantar.',
+
   // Welcome email
   'Welcome to SimeTown': 'Selamat datang ke SimeTown',
   'Your account is ready. Your township office will confirm your home next.': 'Akaun anda sudah sedia. Pejabat perbandaran anda akan mengesahkan rumah anda seterusnya.',
